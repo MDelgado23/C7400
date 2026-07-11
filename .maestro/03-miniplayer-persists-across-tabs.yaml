@@ -1,0 +1,12 @@
+# Spec 5.3 — app-shell: switching tabs keeps audio + mini-player visible.
+appId: ar.com.lu32.radio
+---
+- launchApp
+- tapOn: 'Reproducir'
+- extendedWaitUntil:
+    visible: 'Pausar'
+    timeout: 8000
+- tapOn: 'Noticias'
+# The mini-player (with its Pausar control) must remain visible on the Noticias tab.
+- assertVisible: 'Pausar'
+- assertVisible: 'LU32 en vivo'

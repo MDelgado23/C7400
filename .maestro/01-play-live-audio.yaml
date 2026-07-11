@@ -1,0 +1,11 @@
+# Spec 5.1 — live-audio-playback: tap play → live audio starts, UI shows pause.
+# (Audio output itself is verified manually / on a real device; here we assert
+#  the player reaches the playing state within a reasonable time.)
+appId: ar.com.lu32.radio
+---
+- launchApp
+- assertVisible: 'LU32 en vivo'
+- tapOn: 'Reproducir'
+- extendedWaitUntil:
+    visible: 'Pausar'
+    timeout: 8000

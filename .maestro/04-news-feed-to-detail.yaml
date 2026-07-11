@@ -1,0 +1,15 @@
+# Spec 5.4 — news-feed: open Noticias, tap an article, see the detail; the
+# mini-player stays visible (audio unaffected).
+appId: ar.com.lu32.radio
+---
+- launchApp
+- tapOn: 'Noticias'
+- extendedWaitUntil:
+    visible:
+      id: 'article-.*'
+    timeout: 10000
+- tapOn:
+    id: 'article-.*'
+    index: 0
+# On the detail screen the persistent mini-player is still present.
+- assertVisible: 'LU32 en vivo'

@@ -1,6 +1,7 @@
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
+import { BackgroundPlaybackNotice } from '../../ui/organisms/BackgroundPlaybackNotice';
 import { colors, radius, spacing } from '../../ui/theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
 
@@ -10,6 +11,10 @@ interface PlayerScreenViewProps {
   imageUrl?: string;
   onToggle: () => void;
   onRetry: () => void;
+  /** Show the "background playback at risk" notice above the player. */
+  backgroundNoticeVisible?: boolean;
+  onEnableBackground?: () => void;
+  onDismissBackground?: () => void;
 }
 
 /**
@@ -23,12 +28,24 @@ export function PlayerScreenView({
   imageUrl,
   onToggle,
   onRetry,
+  backgroundNoticeVisible = false,
+  onEnableBackground,
+  onDismissBackground,
 }: PlayerScreenViewProps) {
   const willPause = toggleIntent(state) === 'pause';
   const controlLabel = willPause ? 'Pausar' : 'Reproducir';
 
   return (
     <Screen>
+      {backgroundNoticeVisible ? (
+        <View style={styles.notice}>
+          <BackgroundPlaybackNotice
+            onEnable={onEnableBackground ?? (() => {})}
+            onDismiss={onDismissBackground ?? (() => {})}
+          />
+        </View>
+      ) : null}
+
       <View style={styles.content}>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.artwork} />
@@ -82,6 +99,10 @@ export function PlayerScreenView({
 const ARTWORK_SIZE = 220;
 
 const styles = StyleSheet.create({
+  notice: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
   content: {
     flex: 1,
     alignItems: 'center',

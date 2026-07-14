@@ -26,7 +26,9 @@
       "package": "ar.com.lu32.radio",
       "permissions": [
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
     },
     "web": {
@@ -36,7 +38,8 @@
       [
         "expo-audio",
         {
-          "microphonePermission": false
+          "microphonePermission": false,
+          "enableBackgroundPlayback": true
         }
       ],
       "expo-asset"

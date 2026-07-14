@@ -1,6 +1,7 @@
 import { usePlayerStore } from '../../core/store/playerStore';
 import { retry, toggle } from '../../core/audio/audioService';
 import { PlayerScreenView } from './PlayerScreenView';
+import { useBackgroundPlaybackWarning } from './useBackgroundPlaybackWarning';
 
 /**
  * Container for the Radio tab. Subscribes to the store with narrow selectors
@@ -10,6 +11,7 @@ import { PlayerScreenView } from './PlayerScreenView';
 export function PlayerScreen() {
   const state = usePlayerStore((s) => s.state);
   const program = usePlayerStore((s) => s.program);
+  const backgroundWarning = useBackgroundPlaybackWarning();
 
   return (
     <PlayerScreenView
@@ -18,6 +20,9 @@ export function PlayerScreen() {
       imageUrl={program?.imageUrl}
       onToggle={toggle}
       onRetry={retry}
+      backgroundNoticeVisible={backgroundWarning.visible}
+      onEnableBackground={backgroundWarning.enable}
+      onDismissBackground={backgroundWarning.dismiss}
     />
   );
 }

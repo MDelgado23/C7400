@@ -2,6 +2,10 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
+# Dismiss the (state-dependent) background-playback notice if present.
+- tapOn:
+    text: 'Descartar aviso'
+    optional: true
 - tapOn: 'Reproducir'
 - extendedWaitUntil:
     visible: 'Pausar'

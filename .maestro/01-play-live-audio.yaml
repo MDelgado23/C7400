@@ -4,6 +4,13 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
+# The background-playback notice may overlay the top of the Radio screen
+# (state-dependent: shown only when the app is NOT exempt from battery
+# optimization). Dismiss it if present so the flow runs from a known state.
+# The notice itself is covered end-to-end in 05-background-playback-warning.yaml.
+- tapOn:
+    text: 'Descartar aviso'
+    optional: true
 - assertVisible: 'LU32 en vivo'
 - tapOn: 'Reproducir'
 - extendedWaitUntil:

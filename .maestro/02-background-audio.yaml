@@ -5,6 +5,12 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
+# Dismiss the (state-dependent) background-playback notice if it is showing, so
+# the run is deterministic. The dismissal persists while the app is backgrounded,
+# so it will not reappear on the foreground below.
+- tapOn:
+    text: 'Descartar aviso'
+    optional: true
 - tapOn: 'Reproducir'
 - extendedWaitUntil:
     visible: 'Pausar'

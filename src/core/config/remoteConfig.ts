@@ -16,12 +16,16 @@ export interface AppConfig {
   streamUrl: string;
   /** Base URL for the Tadevel content API (news). */
   newsApiBase: string;
+  /** Station badge, used as the lock-screen / media-notification artwork. Must
+   *  be a real HTTPS URL — expo-audio rejects scheme-less/bundled values. */
+  stationLogoUrl: string;
 }
 
 /** Baked-in defaults. Verified working as of 2026-07-10. */
 const FALLBACK_CONFIG: AppConfig = {
   streamUrl: 'https://ssl.radiosnethosting.com/index.php?port=9966',
   newsApiBase: 'https://flex-app.tadevel-cdn.com/hostname/lu32.com.ar/api/v1',
+  stationLogoUrl: 'https://i.ibb.co/1YPnKXrf/logo-am.png',
 };
 
 /**
@@ -45,6 +49,9 @@ function sanitize(input: unknown): Partial<AppConfig> {
   }
   if (typeof data.newsApiBase === 'string' && data.newsApiBase.startsWith('https://')) {
     out.newsApiBase = data.newsApiBase;
+  }
+  if (typeof data.stationLogoUrl === 'string' && data.stationLogoUrl.startsWith('https://')) {
+    out.stationLogoUrl = data.stationLogoUrl;
   }
   return out;
 }

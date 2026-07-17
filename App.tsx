@@ -30,8 +30,8 @@ export default function App() {
     // UNDER the splash instead of flashing a "loading" state after it. Failures
     // surface through the player's error/retry UI, so we don't block on them.
     void (async () => {
-      const { streamUrl } = await loadRemoteConfig();
-      await initAudio(streamUrl);
+      const { streamUrl, stationLogoUrl } = await loadRemoteConfig();
+      await initAudio(streamUrl, stationLogoUrl);
       play();
     })().catch(() => undefined);
   }, []);

@@ -16,7 +16,6 @@ import {
   getNetworkStateAsync,
   type NetworkState,
 } from 'expo-network';
-import { Asset } from 'expo-asset';
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
 import { validArtworkUrl } from './artworkUrl';
@@ -56,25 +55,12 @@ let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
 const DEFAULT_NOW_PLAYING: NowPlaying = { title: 'En vivo' };
 
 /**
- * The bundled LU32 station badge, resolved to a local URI so it can be used as
- * the lock-screen / notification artwork when a live program has no image of its
- * own. Resolved once (async) at init; falls back to `undefined` on failure.
+ * Station badge URL (from remote config) used as the lock-screen / media-
+ * notification artwork when a live program has no image of its own. Must be a
+ * real HTTP(S) URL — a bundled asset resolves to a scheme-less id in release,
+ * which expo-audio rejects with MalformedURLException — so it's validated.
  */
-const LU32_LOGO = require('../../../assets/logo-am.png');
-let lu32LogoUri: string | undefined;
-
-async function resolveLogoUri(): Promise<void> {
-  try {
-    const asset = Asset.fromModule(LU32_LOGO);
-    await asset.downloadAsync();
-    // Only keep it if it's a real URL (file://). In release builds a bundled
-    // asset can resolve to a scheme-less id ("assets_logoam") that expo-audio
-    // rejects with MalformedURLException — validArtworkUrl drops those.
-    lu32LogoUri = validArtworkUrl(asset.localUri ?? asset.uri ?? undefined);
-  } catch {
-    lu32LogoUri = undefined;
-  }
-}
+let stationLogoUri: string | undefined;
 
 /** Publishes now-playing metadata to the OS lock screen (live = no scrub bar). */
 function pushLockScreen(np: NowPlaying): void {
@@ -85,7 +71,7 @@ function pushLockScreen(np: NowPlaying): void {
     // Program image when we have one, otherwise the station badge so the media
     // notification / lock screen is never blank on the live stream. BOTH are
     // validated: a scheme-less artworkUrl crashes setActiveForLockScreen.
-    artworkUrl: validArtworkUrl(np.imageUrl) ?? lu32LogoUri,
+    artworkUrl: validArtworkUrl(np.imageUrl) ?? stationLogoUri,
   };
   // Defensive: a bad metadata/artwork value must never crash playback. This runs
   // from UI events (toggle) where an uncaught throw is a hard app crash.
@@ -100,16 +86,17 @@ function pushLockScreen(np: NowPlaying): void {
  * Initialize the engine for a live stream. `doNotMix` is REQUIRED for
  * lock-screen controls and for sustained (>3 min) Android background playback.
  */
-export async function initAudio(streamUrl: string): Promise<void> {
+export async function initAudio(streamUrl: string, logoUrl?: string): Promise<void> {
+  // Station badge for the lock-screen / notification artwork. Validated here so
+  // a bad value can never reach setActiveForLockScreen; undefined just means the
+  // notification has no large artwork (Android still shows the app icon).
+  stationLogoUri = validArtworkUrl(logoUrl);
+
   // Android 13+: the media-playback foreground service can only post its
   // controls notification with POST_NOTIFICATIONS granted. Without it the OS
   // kills background audio after ~18s and no shade/lock-screen controls appear.
   // iOS is a no-op here (handled system-side).
   await requestNotificationPermissionsAsync();
-
-  // Resolve the station badge to a local URI for the lock-screen artwork, in
-  // parallel — pushLockScreen reads it once available, falling back to blank.
-  void resolveLogoUri();
 
   await setAudioModeAsync({
     playsInSilentMode: true,

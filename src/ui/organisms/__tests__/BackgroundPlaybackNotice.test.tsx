@@ -3,11 +3,8 @@ import { BackgroundPlaybackNotice } from '../BackgroundPlaybackNotice';
 
 async function renderNotice() {
   const onEnable = jest.fn();
-  const onDismiss = jest.fn();
-  const view = await render(
-    <BackgroundPlaybackNotice onEnable={onEnable} onDismiss={onDismiss} />,
-  );
-  return { onEnable, onDismiss, view };
+  const view = await render(<BackgroundPlaybackNotice onEnable={onEnable} />);
+  return { onEnable, view };
 }
 
 describe('BackgroundPlaybackNotice', () => {
@@ -22,9 +19,8 @@ describe('BackgroundPlaybackNotice', () => {
     expect(onEnable).toHaveBeenCalledTimes(1);
   });
 
-  it('invokes onDismiss when the user dismisses the notice', async () => {
-    const { onDismiss, view } = await renderNotice();
-    fireEvent.press(view.getByLabelText('Descartar aviso'));
-    expect(onDismiss).toHaveBeenCalledTimes(1);
+  it('is not dismissible: it exposes no dismiss control', async () => {
+    const { view } = await renderNotice();
+    expect(view.queryByLabelText('Descartar aviso')).toBeNull();
   });
 });

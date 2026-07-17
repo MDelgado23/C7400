@@ -1,5 +1,6 @@
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { PlayerScreen } from '../features/radio/PlayerScreen';
 import { NewsStack } from './NewsStack';
 import { MiniPlayer } from '../ui/organisms/MiniPlayer';
@@ -42,8 +43,32 @@ export function RootNavigator() {
           </>
         )}
       >
-        <Tab.Screen name="Radio" component={PlayerScreen} />
-        <Tab.Screen name="Noticias" component={NewsStack} />
+        <Tab.Screen
+          name="Radio"
+          component={PlayerScreen}
+          options={{
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'radio' : 'radio-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Noticias"
+          component={NewsStack}
+          options={{
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'newspaper' : 'newspaper-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
       </Tab.Navigator>
     </NavigationContainer>
   );

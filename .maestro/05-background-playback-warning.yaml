@@ -18,10 +18,15 @@ appId: ar.com.lu32.radio
 ---
 - launchApp:
     clearState: true
-- assertVisible: 'La radio puede cortarse en segundo plano'
+# The loading splash plays first (~1.8s), then autoplay reveals the Radio screen
+# with the notice. The exemption is prompted ONLY by tapping "Activar" below —
+# play() no longer auto-fires the system dialog, so no dialog appears on its own.
+- extendedWaitUntil:
+    visible: 'La radio puede cortarse en segundo plano'
+    timeout: 12000
 - tapOn: 'Activar'
 # The system exemption dialog must appear. "Permitir" is a system-dialog button
-# only (the in-app notice uses "Activar" / "Descartar"), so matching it here
+# only (the in-app notice's only action is "Activar"), so matching it here
 # unambiguously proves the intent fired and the manifest permission is present.
 - extendedWaitUntil:
     visible: 'Permitir'

@@ -1,18 +1,13 @@
-# Spec 5.1 — live-audio-playback: tap play → live audio starts, UI shows pause.
-# (Audio output itself is verified manually / on a real device; here we assert
-#  the player reaches the playing state within a reasonable time.)
+# Spec 5.1 — live-audio-playback: the app autoplays on launch → live audio
+# starts on its own, UI shows pause. (Audio output itself is verified manually /
+# on a real device; here we assert the player reaches the playing state.)
 appId: ar.com.lu32.radio
 ---
 - launchApp
-# The background-playback notice may overlay the top of the Radio screen
-# (state-dependent: shown only when the app is NOT exempt from battery
-# optimization). Dismiss it if present so the flow runs from a known state.
-# The notice itself is covered end-to-end in 05-background-playback-warning.yaml.
-- tapOn:
-    text: 'Descartar aviso'
-    optional: true
-- assertVisible: 'LU32 en vivo'
-- tapOn: 'Reproducir'
+# The loading splash animates the logo (~1.8s) and then the app AUTOPLAYS the
+# live stream, so playback reaches the playing state with NO manual tap. The
+# background-playback notice may overlay the top of the Radio screen but does
+# not block anything (covered in 05-background-playback-warning.yaml).
 - extendedWaitUntil:
     visible: 'Pausar'
-    timeout: 8000
+    timeout: 12000

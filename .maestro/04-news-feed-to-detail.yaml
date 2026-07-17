@@ -3,11 +3,11 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
-# Dismiss the (state-dependent) background-playback notice if present on the
-# Radio tab before navigating away.
-- tapOn:
-    text: 'Descartar aviso'
-    optional: true
+# Wait past the loading splash (autoplay starts the stream on its own) before
+# navigating. The mini-player then persists across tabs.
+- extendedWaitUntil:
+    visible: 'LU32 en vivo'
+    timeout: 12000
 - tapOn: 'Noticias'
 - extendedWaitUntil:
     visible:

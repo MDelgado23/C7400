@@ -2,14 +2,12 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
-# Dismiss the (state-dependent) background-playback notice if present.
-- tapOn:
-    text: 'Descartar aviso'
-    optional: true
-- tapOn: 'Reproducir'
+# Autoplay after the loading splash — wait for the playing state, don't tap. The
+# background-playback notice may overlay the top of the Radio screen but does not
+# block the controls or the tab bar.
 - extendedWaitUntil:
     visible: 'Pausar'
-    timeout: 8000
+    timeout: 12000
 - tapOn: 'Noticias'
 # The mini-player (with its Pausar control) must remain visible on the Noticias tab.
 - assertVisible: 'Pausar'

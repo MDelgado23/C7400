@@ -5,6 +5,9 @@ import { BackgroundPlaybackNotice } from '../../ui/organisms/BackgroundPlaybackN
 import { colors, radius, spacing } from '../../ui/theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
 
+/** Station logo, shown as the player artwork when no program image is available. */
+const LOGO_AM = require('../../../assets/logo-am.png');
+
 interface PlayerScreenViewProps {
   state: PlayerState;
   title: string;
@@ -14,7 +17,6 @@ interface PlayerScreenViewProps {
   /** Show the "background playback at risk" notice above the player. */
   backgroundNoticeVisible?: boolean;
   onEnableBackground?: () => void;
-  onDismissBackground?: () => void;
 }
 
 /**
@@ -30,7 +32,6 @@ export function PlayerScreenView({
   onRetry,
   backgroundNoticeVisible = false,
   onEnableBackground,
-  onDismissBackground,
 }: PlayerScreenViewProps) {
   const willPause = toggleIntent(state) === 'pause';
   const controlLabel = willPause ? 'Pausar' : 'Reproducir';
@@ -39,10 +40,7 @@ export function PlayerScreenView({
     <Screen>
       {backgroundNoticeVisible ? (
         <View style={styles.notice}>
-          <BackgroundPlaybackNotice
-            onEnable={onEnableBackground ?? (() => {})}
-            onDismiss={onDismissBackground ?? (() => {})}
-          />
+          <BackgroundPlaybackNotice onEnable={onEnableBackground ?? (() => {})} />
         </View>
       ) : null}
 
@@ -50,7 +48,12 @@ export function PlayerScreenView({
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.artwork} />
         ) : (
-          <View style={styles.artwork} />
+          <Image
+            source={LOGO_AM}
+            style={styles.artwork}
+            resizeMode="contain"
+            accessibilityLabel="Logo de LU32"
+          />
         )}
 
         <AppText variant="title" style={styles.title} numberOfLines={2}>

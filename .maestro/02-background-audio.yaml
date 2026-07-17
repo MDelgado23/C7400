@@ -5,17 +5,15 @@
 appId: ar.com.lu32.radio
 ---
 - launchApp
-# Dismiss the (state-dependent) background-playback notice if it is showing, so
-# the run is deterministic. The dismissal persists while the app is backgrounded,
-# so it will not reappear on the foreground below.
-- tapOn:
-    text: 'Descartar aviso'
-    optional: true
-- tapOn: 'Reproducir'
+# Autoplay: after the loading splash the stream starts on its own — wait for the
+# playing state instead of tapping. The background-playback notice may overlay
+# the top of the Radio screen but does not block anything.
 - extendedWaitUntil:
     visible: 'Pausar'
-    timeout: 8000
+    timeout: 12000
 - pressKey: Home
 # MANUAL: confirm audio keeps playing and lock-screen shows play/pause + LU32.
 - launchApp
-- assertVisible: 'Pausar'
+- extendedWaitUntil:
+    visible: 'Pausar'
+    timeout: 12000

@@ -1,20 +1,21 @@
 /**
  * Design tokens for the LU32 Radio app.
  *
- * NOTE: this is a PLACEHOLDER palette. Replace with the official LU32 brand
- * assets (colors, fonts) once the client provides them — tracked as an open
- * question in the design. Every component reads from these tokens, so a brand
- * swap is a single-file change here, never a hunt through the codebase.
+ * Palette derived from the Conexion7400 brand logo (assets/logo-app.png): a
+ * royal blue wordmark + an azure accent. The UI is dark navy so the azure pops
+ * and the orange LU32 station badge (the player artwork) reads as a complement.
+ * Every component reads from these tokens, so a brand tweak is a single-file
+ * change here, never a hunt through the codebase.
  */
 
 export const colors = {
-  primary: '#D32027', // radio red (placeholder)
-  primaryDark: '#8E1519',
-  background: '#0E0E10',
-  surface: '#1B1B1F',
+  primary: '#1C7FD6', // brand blue (Conexion7400 azure) — accents, active tab
+  primaryDark: '#16357E', // royal navy (Conexion wordmark) — artwork bg, pressed
+  background: '#0B1426', // dark navy
+  surface: '#13213B', // navy surface — tab bar, cards, mini-player
   text: '#FFFFFF',
-  textMuted: '#A0A0A8',
-  border: '#2A2A30',
+  textMuted: '#98A6C2', // blue-grey
+  border: '#26365B', // navy border
   error: '#FF5A5F',
 } as const;
 

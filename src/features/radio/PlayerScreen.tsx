@@ -22,7 +22,6 @@ export function PlayerScreen() {
       onRetry={retry}
       backgroundNoticeVisible={backgroundWarning.visible}
       onEnableBackground={backgroundWarning.enable}
-      onDismissBackground={backgroundWarning.dismiss}
     />
   );
 }

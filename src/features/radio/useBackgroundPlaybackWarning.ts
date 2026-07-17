@@ -4,22 +4,21 @@ import { isBackgroundPlaybackAtRisk } from '../../core/audio/backgroundPlayback'
 import { requestIgnoreBatteryOptimizations } from '../../core/audio/batteryOptimization';
 
 interface BackgroundPlaybackWarning {
-  /** Whether to show the notice: at risk AND not dismissed this session. */
+  /** Whether to show the notice: the app is at risk (not exempt from Doze). */
   visible: boolean;
   /** Open the exemption dialog, then re-check when the user returns. */
   enable: () => void;
-  /** Hide the notice for this session. */
-  dismiss: () => void;
 }
 
 /**
  * Drives the background-playback warning. Re-checks the exemption whenever the
- * app returns to the foreground, so the notice clears itself the moment the user
- * grants it in system settings — no restart needed.
+ * app returns to the foreground, so the notice clears itself the moment the app
+ * is actually exempt — no restart needed. The notice is NOT dismissible: it
+ * stays until the OS reports the app exempt, since a single grant can land on
+ * "Optimizado" (still not enough for cellular) on some OEMs.
  */
 export function useBackgroundPlaybackWarning(): BackgroundPlaybackWarning {
   const [atRisk, setAtRisk] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
 
   const refresh = useCallback(async () => {
     setAtRisk(await isBackgroundPlaybackAtRisk());
@@ -38,7 +37,5 @@ export function useBackgroundPlaybackWarning(): BackgroundPlaybackWarning {
     void requestIgnoreBatteryOptimizations({ force: true }).then(refresh);
   }, [refresh]);
 
-  const dismiss = useCallback(() => setDismissed(true), []);
-
-  return { visible: atRisk && !dismissed, enable, dismiss };
+  return { visible: atRisk, enable };
 }

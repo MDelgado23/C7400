@@ -23,6 +23,11 @@ describe('PlayerScreenView', () => {
     expect(view.getByText('LU32 en vivo')).toBeTruthy();
   });
 
+  it('shows the station logo as artwork when no program image is provided', async () => {
+    const { view } = await renderView('playing');
+    expect(view.getByLabelText('Logo de LU32')).toBeTruthy();
+  });
+
   it('offers Reproducir when paused', async () => {
     const { view } = await renderView('paused');
     expect(view.getByLabelText('Reproducir')).toBeTruthy();
@@ -64,9 +69,8 @@ describe('PlayerScreenView', () => {
     ).toBeNull();
   });
 
-  it('shows the background-playback notice and wires its actions when at risk', async () => {
+  it('shows the background-playback notice and wires its enable action when at risk', async () => {
     const onEnableBackground = jest.fn();
-    const onDismissBackground = jest.fn();
     const view = await render(
       <PlayerScreenView
         state="playing"
@@ -75,14 +79,12 @@ describe('PlayerScreenView', () => {
         onRetry={jest.fn()}
         backgroundNoticeVisible
         onEnableBackground={onEnableBackground}
-        onDismissBackground={onDismissBackground}
       />,
     );
     fireEvent.press(
       view.getByLabelText('Activar reproducción en segundo plano'),
     );
-    fireEvent.press(view.getByLabelText('Descartar aviso'));
     expect(onEnableBackground).toHaveBeenCalledTimes(1);
-    expect(onDismissBackground).toHaveBeenCalledTimes(1);
+    expect(view.queryByLabelText('Descartar aviso')).toBeNull();
   });
 });

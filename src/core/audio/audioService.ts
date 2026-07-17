@@ -18,7 +18,6 @@ import {
 } from 'expo-network';
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
-import { requestIgnoreBatteryOptimizations } from './batteryOptimization';
 
 /**
  * audioService — the impure bridge between expo-audio and the player store.
@@ -138,10 +137,10 @@ export function play(): void {
   // Activate lock-screen controls on every playback start. This is what spins up
   // the media foreground service; without it Android tears down background audio.
   pushLockScreen(usePlayerStore.getState().program ?? DEFAULT_NOW_PLAYING);
-  // Ask Android to exempt us from Doze so the WiFi radio survives screen-off.
-  // Fire-and-forget: guarded to prompt once/session, silent no-op if already
-  // exempt. Root cause of background stream drops on aggressive OEMs.
-  void requestIgnoreBatteryOptimizations();
+  // NOTE: the Doze/battery-optimization exemption is intentionally NOT prompted
+  // here. Autoplay calls play() on launch, and an auto-firing system dialog would
+  // collide with the persistent BackgroundPlaybackNotice. The notice is now the
+  // single, user-initiated path to the exemption (see useBackgroundPlaybackWarning).
 }
 
 export function pause(): void {

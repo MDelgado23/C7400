@@ -29,11 +29,14 @@ const FALLBACK_CONFIG: AppConfig = {
 };
 
 /**
- * Optional override document the station controls. If it 404s or is invalid,
- * we silently use FALLBACK_CONFIG — the app must never fail to boot over config.
+ * Override document WE control: app-config.json on the public repo's master
+ * branch. Edit it + push to change the stream, logo, or news API at runtime with
+ * NO rebuild (served via raw.githubusercontent, ~5 min CDN cache). If it 404s or
+ * is invalid, we silently use FALLBACK_CONFIG — the app must never fail to boot
+ * over config.
  */
 const REMOTE_CONFIG_URL =
-  'https://flex-app.tadevel-cdn.com/hostname/lu32.com.ar/app-config.json';
+  'https://raw.githubusercontent.com/MDelgado23/C7400/master/app-config.json';
 
 const FETCH_TIMEOUT_MS = 4000;
 

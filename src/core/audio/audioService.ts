@@ -19,6 +19,7 @@ import {
 import { Asset } from 'expo-asset';
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
+import { validArtworkUrl } from './artworkUrl';
 
 /**
  * audioService — the impure bridge between expo-audio and the player store.
@@ -66,7 +67,10 @@ async function resolveLogoUri(): Promise<void> {
   try {
     const asset = Asset.fromModule(LU32_LOGO);
     await asset.downloadAsync();
-    lu32LogoUri = asset.localUri ?? asset.uri;
+    // Only keep it if it's a real URL (file://). In release builds a bundled
+    // asset can resolve to a scheme-less id ("assets_logoam") that expo-audio
+    // rejects with MalformedURLException — validArtworkUrl drops those.
+    lu32LogoUri = validArtworkUrl(asset.localUri ?? asset.uri ?? undefined);
   } catch {
     lu32LogoUri = undefined;
   }
@@ -79,10 +83,17 @@ function pushLockScreen(np: NowPlaying): void {
     title: np.title,
     artist: 'LU32',
     // Program image when we have one, otherwise the station badge so the media
-    // notification / lock screen is never blank on the live stream.
-    artworkUrl: np.imageUrl ?? lu32LogoUri,
+    // notification / lock screen is never blank on the live stream. BOTH are
+    // validated: a scheme-less artworkUrl crashes setActiveForLockScreen.
+    artworkUrl: validArtworkUrl(np.imageUrl) ?? lu32LogoUri,
   };
-  player.setActiveForLockScreen(true, metadata, { isLiveStream: true });
+  // Defensive: a bad metadata/artwork value must never crash playback. This runs
+  // from UI events (toggle) where an uncaught throw is a hard app crash.
+  try {
+    player.setActiveForLockScreen(true, metadata, { isLiveStream: true });
+  } catch {
+    // Lock-screen controls are best-effort; audio keeps playing regardless.
+  }
 }
 
 /**

@@ -25,7 +25,7 @@ export interface AppConfig {
 const FALLBACK_CONFIG: AppConfig = {
   streamUrl: 'https://ssl.radiosnethosting.com/index.php?port=9966',
   newsApiBase: 'https://flex-app.tadevel-cdn.com/hostname/lu32.com.ar/api/v1',
-  stationLogoUrl: 'https://i.ibb.co/1YPnKXrf/logo-am.png',
+  stationLogoUrl: 'https://i.ibb.co/VWR11c8H/logo-am-square.png',
 };
 
 /**

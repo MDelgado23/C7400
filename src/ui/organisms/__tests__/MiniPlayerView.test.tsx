@@ -37,4 +37,9 @@ describe('MiniPlayerView', () => {
     const { view } = await renderView('buffering');
     expect(view.getByLabelText('Cargando')).toBeTruthy();
   });
+
+  it('shows the station logo as artwork when no program image is provided', async () => {
+    const { view } = await renderView('playing');
+    expect(view.getByLabelText('Logo de LU32')).toBeTruthy();
+  });
 });

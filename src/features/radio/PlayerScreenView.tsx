@@ -51,7 +51,7 @@ export function PlayerScreenView({
           <Image
             source={LOGO_AM}
             style={styles.artwork}
-            resizeMode="contain"
+            resizeMode="cover"
             accessibilityLabel="Logo de LU32"
           />
         )}

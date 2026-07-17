@@ -3,6 +3,9 @@ import { AppText } from '../atoms/AppText';
 import { colors, radius, spacing } from '../theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
 
+/** Station badge, shown as the mini-player artwork when no program image exists. */
+const LOGO_AM = require('../../../assets/logo-am.png');
+
 interface MiniPlayerViewProps {
   state: PlayerState;
   title: string;
@@ -23,9 +26,14 @@ export function MiniPlayerView({ state, title, imageUrl, onToggle }: MiniPlayerV
   return (
     <View style={styles.container}>
       {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.artwork} />
+        <Image source={{ uri: imageUrl }} style={styles.artwork} resizeMode="cover" />
       ) : (
-        <View style={styles.artwork} />
+        <Image
+          source={LOGO_AM}
+          style={styles.artwork}
+          resizeMode="cover"
+          accessibilityLabel="Logo de LU32"
+        />
       )}
 
       <View style={styles.info}>

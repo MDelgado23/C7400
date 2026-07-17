@@ -16,6 +16,7 @@ import {
   getNetworkStateAsync,
   type NetworkState,
 } from 'expo-network';
+import { Asset } from 'expo-asset';
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
 
@@ -53,13 +54,33 @@ let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
  */
 const DEFAULT_NOW_PLAYING: NowPlaying = { title: 'En vivo' };
 
+/**
+ * The bundled LU32 station badge, resolved to a local URI so it can be used as
+ * the lock-screen / notification artwork when a live program has no image of its
+ * own. Resolved once (async) at init; falls back to `undefined` on failure.
+ */
+const LU32_LOGO = require('../../../assets/logo-am.png');
+let lu32LogoUri: string | undefined;
+
+async function resolveLogoUri(): Promise<void> {
+  try {
+    const asset = Asset.fromModule(LU32_LOGO);
+    await asset.downloadAsync();
+    lu32LogoUri = asset.localUri ?? asset.uri;
+  } catch {
+    lu32LogoUri = undefined;
+  }
+}
+
 /** Publishes now-playing metadata to the OS lock screen (live = no scrub bar). */
 function pushLockScreen(np: NowPlaying): void {
   if (!player) return;
   const metadata: AudioMetadata = {
     title: np.title,
     artist: 'LU32',
-    artworkUrl: np.imageUrl,
+    // Program image when we have one, otherwise the station badge so the media
+    // notification / lock screen is never blank on the live stream.
+    artworkUrl: np.imageUrl ?? lu32LogoUri,
   };
   player.setActiveForLockScreen(true, metadata, { isLiveStream: true });
 }
@@ -74,6 +95,10 @@ export async function initAudio(streamUrl: string): Promise<void> {
   // kills background audio after ~18s and no shade/lock-screen controls appear.
   // iOS is a no-op here (handled system-side).
   await requestNotificationPermissionsAsync();
+
+  // Resolve the station badge to a local URI for the lock-screen artwork, in
+  // parallel — pushLockScreen reads it once available, falling back to blank.
+  void resolveLogoUri();
 
   await setAudioModeAsync({
     playsInSilentMode: true,

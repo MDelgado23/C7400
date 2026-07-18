@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PlayerScreen } from '../features/radio/PlayerScreen';
 import { NewsStack } from './NewsStack';
 import { MiniPlayer } from '../ui/organisms/MiniPlayer';
+import { shouldShowMiniPlayer, FULL_PLAYER_ROUTE } from './miniPlayerVisibility';
 import { colors } from '../ui/theme';
 
 const Tab = createBottomTabNavigator();
@@ -21,10 +22,12 @@ const navTheme = {
 };
 
 /**
- * Root shell: bottom tabs (Radio · Noticias) with the persistent MiniPlayer
- * rendered ABOVE the tab bar via a custom `tabBar`. Because the tab bar is
- * rendered once (outside the screens), the MiniPlayer is a single instance that
- * survives tab switches — audio never remounts.
+ * Root shell: bottom tabs (Radio · Noticias · …) with the persistent MiniPlayer
+ * rendered ABOVE the tab bar via a custom `tabBar`. The mini-player shows on
+ * every section EXCEPT Radio (which already has the full player), so any future
+ * section gets it automatically — see `shouldShowMiniPlayer`. Audio lives in the
+ * audio service, not this component, so toggling its visibility never touches
+ * playback.
  */
 export function RootNavigator() {
   return (
@@ -36,12 +39,17 @@ export function RootNavigator() {
           tabBarInactiveTintColor: colors.textMuted,
           tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
         }}
-        tabBar={(props) => (
-          <>
-            <MiniPlayer />
-            <BottomTabBar {...props} />
-          </>
-        )}
+        tabBar={(props) => {
+          const activeRoute = props.state.routes[props.state.index]?.name;
+          return (
+            <>
+              {shouldShowMiniPlayer(activeRoute) ? (
+                <MiniPlayer onPress={() => props.navigation.navigate(FULL_PLAYER_ROUTE)} />
+              ) : null}
+              <BottomTabBar {...props} />
+            </>
+          );
+        }}
       >
         <Tab.Screen
           name="Radio"

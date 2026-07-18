@@ -10,7 +10,12 @@ import { MiniPlayerView } from './MiniPlayerView';
  * Falls back to "LU32 en vivo" when no now-playing metadata is available,
  * satisfying the now-playing fallback requirement.
  */
-export function MiniPlayer() {
+interface MiniPlayerProps {
+  /** Tap the bar body → open the full player (wired to the Radio tab). */
+  onPress?: () => void;
+}
+
+export function MiniPlayer({ onPress }: MiniPlayerProps) {
   const state = usePlayerStore((s) => s.state);
   const program = usePlayerStore((s) => s.program);
 
@@ -20,6 +25,7 @@ export function MiniPlayer() {
       title={program?.title ?? 'LU32 en vivo'}
       imageUrl={program?.imageUrl}
       onToggle={toggle}
+      onPress={onPress}
     />
   );
 }

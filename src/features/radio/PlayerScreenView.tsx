@@ -1,6 +1,8 @@
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
+import { Spinner } from '../../ui/atoms/Spinner';
 import { BackgroundPlaybackNotice } from '../../ui/organisms/BackgroundPlaybackNotice';
 import { colors, radius, spacing } from '../../ui/theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
@@ -34,7 +36,8 @@ export function PlayerScreenView({
   onEnableBackground,
 }: PlayerScreenViewProps) {
   const willPause = toggleIntent(state) === 'pause';
-  const controlLabel = willPause ? 'Pausar' : 'Reproducir';
+  const isBuffering = state === 'buffering';
+  const controlLabel = isBuffering ? 'Cargando' : willPause ? 'Pausar' : 'Reproducir';
 
   return (
     <Screen>
@@ -80,9 +83,6 @@ export function PlayerScreenView({
           </View>
         ) : (
           <View style={styles.block}>
-            {state === 'buffering' ? (
-              <ActivityIndicator accessibilityLabel="Cargando" color={colors.text} />
-            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={controlLabel}
@@ -90,7 +90,16 @@ export function PlayerScreenView({
               style={styles.playButton}
               hitSlop={12}
             >
-              <AppText variant="title">{willPause ? '❚❚' : '▶'}</AppText>
+              {isBuffering ? (
+                <Spinner size={40} color={colors.text} />
+              ) : (
+                <Ionicons
+                  name={willPause ? 'pause' : 'play'}
+                  size={40}
+                  color={colors.text}
+                  style={willPause ? undefined : styles.playIconOffset}
+                />
+              )}
             </Pressable>
           </View>
         )}
@@ -126,13 +135,15 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.error },
   playButton: {
-    width: 72,
-    height: 72,
+    width: 88,
+    height: 88,
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The play triangle reads as left-heavy in a circle; nudge it to optical centre.
+  playIconOffset: { marginLeft: 4 },
   retryButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,

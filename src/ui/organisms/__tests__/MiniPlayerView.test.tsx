@@ -42,4 +42,36 @@ describe('MiniPlayerView', () => {
     const { view } = await renderView('playing');
     expect(view.getByLabelText('Logo de LU32')).toBeTruthy();
   });
+
+  it('invokes onPress when the bar body (not the control) is tapped', async () => {
+    const onPress = jest.fn();
+    const onToggle = jest.fn();
+    const view = await render(
+      <MiniPlayerView
+        state="playing"
+        title="La Mañana de LU32"
+        onToggle={onToggle}
+        onPress={onPress}
+      />,
+    );
+    fireEvent.press(view.getByTestId('mini-player-bar'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('invokes onToggle (not onPress) when the play/pause control is tapped', async () => {
+    const onPress = jest.fn();
+    const onToggle = jest.fn();
+    const view = await render(
+      <MiniPlayerView
+        state="paused"
+        title="La Mañana de LU32"
+        onToggle={onToggle}
+        onPress={onPress}
+      />,
+    );
+    fireEvent.press(view.getByLabelText('Reproducir'));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
 });

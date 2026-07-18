@@ -155,6 +155,12 @@ function onNetworkChange(state: NetworkState): void {
 }
 
 export function play(): void {
+  // Live sync: resuming a paused live stream would play a stale, behind-air
+  // buffer, so reload the source to jump back to the live edge. A fresh start is
+  // already at the edge, so only reload when resuming from an explicit pause.
+  if (usePlayerStore.getState().state === 'paused' && player && currentStreamUrl) {
+    player.replace(currentStreamUrl);
+  }
   player?.play();
   usePlayerStore.getState().applyEvent('PLAY');
   // Activate lock-screen controls on every playback start. This is what spins up

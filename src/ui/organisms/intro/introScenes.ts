@@ -16,7 +16,7 @@
  *   img1 (mark)      C: x594–1170 c(882,1243)   7400: x1212–2914 c(2063,1259)
  *   img2 (logotype)  C: x260–552  c(406,1140)   7400: x2220–3242 c(2731,1189)
  */
-import { clamp, easeInOutCubic, easeInOutQuad, easeOutBack, easeOutQuad } from './easings';
+import { clamp, easeInOutCubic, easeOutBack, easeOutQuad } from './easings';
 
 /** Reference stage the geometry is authored in. */
 export const STAGE = { width: 1080, height: 1920 } as const;
@@ -103,90 +103,78 @@ export function markFrame(p: number): MarkFrame {
 
 // ── Scene 2: Reveal ───────────────────────────────────────────────────────
 /**
- * A glyph "piece" of the full logotype (img2) used to grow the mark into the
- * word: it starts offset/scaled to sit over the mark, then travels to its
- * final spot. `origin`/`clip` are percentages of the img2 box.
+ * The reveal composes the final logotype from three horizontal slices of the
+ * SAME logotype image — the "C", the middle "onexion", and the "7400". It opens
+ * from a closed pose (C and 7400 pulled together in the centre, reading "C7400"
+ * like the mark, no "onexion") to the open pose (the full "Conexion7400"): the C
+ * slides left, the 7400 slides right, and "onexion" wipes open between them. The
+ * C and 7400 NEVER disappear.
+ *
+ * Each slice is a fixed-width window over the logotype; its glyph is picked by
+ * `imgLeft` (the window's own image is offset so it always shows that glyph, no
+ * matter where the window is positioned). Motion is pure LAYOUT (`left`/`width`)
+ * — deliberately NO `transform: scale`, because `overflow: 'hidden'` + a scale
+ * transform silently clips to nothing on the New Architecture (Fabric), which
+ * is exactly what made the earlier piece-based reveal render blank.
+ *
+ * The slices tile the logotype perfectly:
+ *   C [0, 0.1585) · onexion [0.1585, 0.6289) · 7400 [0.6289, 1] of the width.
  */
-export interface PieceSpec {
-  /** transform-origin as [x%, y%] of the image box. */
-  origin: readonly [number, number];
-  /** Starting translation in stage px (reached at q=0). */
-  from: readonly [number, number];
-  /** Starting scale (reached at q=0); lands at 1 when q=1. */
-  scale: number;
-  /** Clip inset {top,right,bottom,left} in %, isolating this glyph band. */
-  clip: { top: number; right: number; bottom: number; left: number };
+export interface Band {
+  /** Slice width in stage px. */
+  w: number;
+  /** Left offset (stage px) of this slice WITHIN the logotype image. */
+  imgLeft: number;
 }
-
-const K = LOGO_W / 3508; // stage px per image px
-
-export const PIECES: Record<'C' | 'seven', PieceSpec> = {
-  C: {
-    origin: [(406 / 3508) * 100, (1140 / 2481) * 100],
-    from: [(882 - 406) * K, (1243 - 1140) * K],
-    scale: 576 / 292,
-    clip: { top: 0, right: 84.15, bottom: 0, left: 0 },
-  },
-  seven: {
-    origin: [(2731 / 3508) * 100, (1189 / 2481) * 100],
-    from: [(2063 - 2731) * K, (1259 - 1189) * K],
-    scale: 1702 / 1022,
-    clip: { top: 0, right: 0, bottom: 0, left: 62.89 },
-  },
+export const BAND: Record<'C' | 'onexion' | 'seven', Band> = {
+  C: { w: 0.1585 * LOGO_W, imgLeft: 0 },
+  onexion: { w: 0.4704 * LOGO_W, imgLeft: 0.1585 * LOGO_W },
+  seven: { w: 0.3711 * LOGO_W, imgLeft: 0.6289 * LOGO_W },
 };
 
-/** The "onexion" middle band clip: left inset is fixed, right inset wipes open. */
-export const ONEX_LEFT_INSET = 15.85;
-const ONEX_RIGHT_HIDDEN = 84.15;
-const ONEX_RIGHT_OPEN = 37.11;
+/** Left offset (stage px) of the C when the word is closed (C+7400 centred). */
+export const CLOSED_C_LEFT = (LOGO_W - (BAND.C.w + BAND.seven.w)) / 2;
 
-export interface PieceFrame {
-  tx: number;
-  ty: number;
-  scale: number;
+export interface RevealLayout {
+  /** Left offset (stage px) of the C slice. */
+  cLeft: number;
+  /** Left offset of the onexion slice. */
+  onexLeft: number;
+  /** Width of the onexion slice (0 closed → full open). */
+  onexWidth: number;
+  /** Left offset of the 7400 slice. */
+  sevenLeft: number;
 }
 
-/** Interpolate a piece from its start (q=0) to its landed pose (q=1). */
-export function pieceFrame(key: 'C' | 'seven', q: number): PieceFrame {
+/** Slice positions for opening progress `u` (0 = closed/compact, 1 = open). */
+export function revealLayout(u: number): RevealLayout {
   'worklet';
-  const pc = PIECES[key];
-  return {
-    tx: pc.from[0] * (1 - q),
-    ty: pc.from[1] * (1 - q),
-    scale: pc.scale + (1 - pc.scale) * q,
-  };
+  const cLeft = CLOSED_C_LEFT * (1 - u);
+  const onexWidth = BAND.onexion.w * u;
+  const onexLeft = cLeft + BAND.C.w;
+  const sevenLeft = onexLeft + onexWidth;
+  return { cLeft, onexLeft, onexWidth, sevenLeft };
 }
 
 export interface RevealFrame {
-  /** Whole-group breathing punch; 1 at both ends. */
-  punch: number;
-  /** Travel-apart progress for the pieces (0 start → 1 landed). */
-  q: number;
-  /** Opacity of the img2 pieces fading in on top. */
+  /** Opacity of the logotype slices fading in over the mark. */
   in2: number;
-  /** Opacity of the img1 mark fading out underneath. */
+  /** Opacity of the mark (img1) fading out underneath. */
   out1: number;
-  /** Opacity of the "onexion" band. */
-  onexOpacity: number;
-  /** Right inset (%) of the "onexion" band as it wipes open L→R. */
-  onexRightInset: number;
+  /** Opening progress for the slices (0 closed → 1 open). */
+  u: number;
 }
 
 /**
- * The C and 7400 split apart while "onexion" wipes in between them, everything
- * landing exactly on the final logotype. Pieces fade in ON TOP first, then the
- * mark fades out underneath, so there's no dip/flash at the handoff.
+ * Slices fade in ON TOP of the mark first, then the mark fades out underneath
+ * (no dip/flash), and the word opens across the rest of the scene.
  */
 export function revealFrame(p: number): RevealFrame {
   'worklet';
-  const punch = 1 + 0.035 * Math.sin(Math.PI * easeInOutQuad(p));
-  const q = easeInOutCubic(clamp((p - 0.15) / 0.7, 0, 1));
-  const in2 = clamp(p / 0.09, 0, 1);
-  const out1 = 1 - clamp((p - 0.1) / 0.14, 0, 1);
-  const wipe = easeInOutCubic(clamp((p - 0.28) / 0.55, 0, 1));
-  const onexOpacity = clamp((p - 0.26) / 0.12, 0, 1);
-  const onexRightInset = ONEX_RIGHT_HIDDEN + (ONEX_RIGHT_OPEN - ONEX_RIGHT_HIDDEN) * wipe;
-  return { punch, q, in2, out1, onexOpacity, onexRightInset };
+  const in2 = clamp(p / 0.12, 0, 1);
+  const out1 = 1 - clamp((p - 0.08) / 0.16, 0, 1);
+  const u = easeInOutCubic(clamp((p - 0.08) / 0.84, 0, 1));
+  return { in2, out1, u };
 }
 
 // ── Scene 3: Finale ───────────────────────────────────────────────────────

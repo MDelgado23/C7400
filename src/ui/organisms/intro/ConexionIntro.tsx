@@ -10,16 +10,15 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import {
+  BAND,
   DOT_COUNT,
   dotOpacity,
   finaleFrame,
   LOGO_H,
   LOGO_W,
   markFrame,
-  ONEX_LEFT_INSET,
-  PIECES,
-  pieceFrame,
   revealFrame,
+  revealLayout,
   STAGE,
   timelineAt,
   TOTAL_DUR,
@@ -35,17 +34,18 @@ import {
  * All motion is driven by a single Reanimated `clock` (seconds, 0 → TOTAL_DUR)
  * on the UI thread; every layer reads it through a worklet and derives its pose
  * from the PURE scene math in `introScenes.ts` (unit-tested separately). The web
- * original used `clip-path`; RN has none, so each glyph band is emulated with an
+ * original used `clip-path`; RN has none, so each glyph slice is an
  * `overflow: 'hidden'` window over a full-size image — no native masking dep.
+ * The reveal animates those windows with LAYOUT props (`left`/`width`) ONLY:
+ * `overflow: 'hidden'` + a `transform: scale` clips to nothing on Fabric, which
+ * is what made an earlier transform-based reveal render blank.
  *
  * Everything is authored in the reference's 1080×1920 stage space and the whole
  * stage is scaled to the device width once, so the geometry never changes.
  */
 
-// TODO(assets): drop the two source PNGs from the design project's `uploads/`
-// folder here — `1.png` (the C7400 mark) and `2.png` (the full logotype).
-const IMG_MARK = require('../../../../assets/intro-mark.png'); // uploads/1.png
-const IMG_LOGOTYPE = require('../../../../assets/intro-logotype.png'); // uploads/2.png
+const IMG_MARK = require('../../../../assets/intro-mark.png'); // uploads/1.png — "C7400"
+const IMG_LOGOTYPE = require('../../../../assets/intro-logotype.png'); // uploads/2.png — "Conexion7400"
 
 const NAVY = '#1b3f8f'; // brand navy — the finale loading dots
 const BG = '#ffffff'; // the design's stage background
@@ -56,39 +56,33 @@ interface ConexionIntroProps {
 }
 
 /**
- * One glyph piece of the logotype (the C, or the 7400). A full-size logotype
- * image sits inside an `overflow: 'hidden'` band window (the clip), and the
- * outer full-box view carries the travel/scale transform about the glyph's
- * measured origin — matching the CSS `clip-path` + `transform` of the source.
+ * One horizontal slice of the logotype (the C, the middle "onexion", or the
+ * 7400). The window clips to the slice via `overflow: 'hidden'`; the image
+ * inside is offset by `imgLeft` so the window always shows THIS glyph, wherever
+ * the window is positioned. The C and 7400 keep a fixed width and only slide
+ * (`left`); "onexion" holds its left and grows its `width`. All layout — no
+ * transforms — so nothing can be clipped away on Fabric.
  */
-function Piece({ keyName, clock }: { keyName: 'C' | 'seven'; clock: SharedValue<number> }) {
-  const spec = PIECES[keyName];
-  const bandLeft = (spec.clip.left / 100) * LOGO_W;
-  const bandTop = (spec.clip.top / 100) * LOGO_H;
-  const bandW = ((100 - spec.clip.left - spec.clip.right) / 100) * LOGO_W;
-  const bandH = ((100 - spec.clip.top - spec.clip.bottom) / 100) * LOGO_H;
-
+function RevealSlice({ which, clock }: { which: 'C' | 'onexion' | 'seven'; clock: SharedValue<number> }) {
+  const band = BAND[which];
   const style = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     const active = pos.name === 'Reveal';
     const f = revealFrame(active ? pos.progress : 0);
-    const pf = pieceFrame(keyName, f.q);
-    return {
-      opacity: active ? f.in2 : 0,
-      transform: [{ translateX: pf.tx }, { translateY: pf.ty }, { scale: pf.scale }],
-    };
+    const lay = revealLayout(f.u);
+    const opacity = active ? f.in2 : 0;
+    if (which === 'C') return { left: lay.cLeft, width: band.w, opacity };
+    if (which === 'seven') return { left: lay.sevenLeft, width: band.w, opacity };
+    return { left: lay.onexLeft, width: lay.onexWidth, opacity }; // onexion
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.fill,
-        { transformOrigin: `${spec.origin[0]}% ${spec.origin[1]}%` },
-        style,
-      ]}>
-      <View style={{ position: 'absolute', left: bandLeft, top: bandTop, width: bandW, height: bandH, overflow: 'hidden' }}>
-        <Image source={IMG_LOGOTYPE} resizeMode="stretch" style={{ position: 'absolute', left: -bandLeft, top: -bandTop, width: LOGO_W, height: LOGO_H }} />
-      </View>
+    <Animated.View style={[{ position: 'absolute', top: 0, height: LOGO_H, overflow: 'hidden' }, style]}>
+      <Image
+        source={IMG_LOGOTYPE}
+        resizeMode="stretch"
+        style={{ position: 'absolute', left: -band.imgLeft, top: 0, width: LOGO_W, height: LOGO_H }}
+      />
     </Animated.View>
   );
 }
@@ -135,23 +129,13 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
     return { opacity: f.opacity, transform: [{ scale: f.scale }] };
   });
 
-  // Scene 2 — the whole reveal group "breathes" (punch == 1 at both ends).
+  // Scene 2 — the reveal group is just shown/hidden; the slices carry the motion.
   const revealGroupStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
-    const active = pos.name === 'Reveal';
-    const f = revealFrame(active ? pos.progress : 0);
-    return { opacity: active ? 1 : 0, transform: [{ scale: f.punch }] };
+    return { opacity: pos.name === 'Reveal' ? 1 : 0 };
   });
 
-  // The "onexion" middle band wiping open left→right (animated window width).
-  const onexStyle = useAnimatedStyle(() => {
-    const pos = timelineAt(clock.value);
-    const f = revealFrame(pos.name === 'Reveal' ? pos.progress : 0);
-    const w = ((100 - ONEX_LEFT_INSET - f.onexRightInset) / 100) * LOGO_W;
-    return { width: Math.max(0, w), opacity: f.onexOpacity };
-  });
-
-  // The mark fading out UNDER the pieces once they're fully opaque.
+  // The mark fading out UNDER the slices once they're fully opaque.
   const revealMarkStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     const f = revealFrame(pos.name === 'Reveal' ? pos.progress : 0);
@@ -172,8 +156,6 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
     return { opacity: f.dotsIn };
   });
 
-  const onexLeftPx = (ONEX_LEFT_INSET / 100) * LOGO_W;
-
   return (
     <View style={styles.root}>
       <View style={{ width: STAGE.width, height: STAGE.height, transform: [{ scale: stageScale }] }}>
@@ -182,14 +164,12 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
             {/* Scene 1 */}
             <Animated.Image source={IMG_MARK} resizeMode="stretch" style={[styles.fill, markStyle]} />
 
-            {/* Scene 2 */}
+            {/* Scene 2 — mark fades out underneath; the three slices open the word on top */}
             <Animated.View style={[styles.fill, revealGroupStyle]}>
-              <Animated.View style={[{ position: 'absolute', left: onexLeftPx, top: 0, height: LOGO_H, overflow: 'hidden' }, onexStyle]}>
-                <Image source={IMG_LOGOTYPE} resizeMode="stretch" style={{ position: 'absolute', left: -onexLeftPx, top: 0, width: LOGO_W, height: LOGO_H }} />
-              </Animated.View>
-              <Piece keyName="C" clock={clock} />
-              <Piece keyName="seven" clock={clock} />
               <Animated.Image source={IMG_MARK} resizeMode="stretch" style={[styles.fill, revealMarkStyle]} />
+              <RevealSlice which="C" clock={clock} />
+              <RevealSlice which="onexion" clock={clock} />
+              <RevealSlice which="seven" clock={clock} />
             </Animated.View>
 
             {/* Scene 3 */}

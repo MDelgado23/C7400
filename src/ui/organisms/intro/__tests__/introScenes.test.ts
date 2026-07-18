@@ -1,12 +1,13 @@
 import {
+  BAND,
+  CLOSED_C_LEFT,
   DOT_COUNT,
   dotOpacity,
   finaleFrame,
   LOGO_W,
   markFrame,
-  PIECES,
-  pieceFrame,
   revealFrame,
+  revealLayout,
   SCENES,
   TOTAL_DUR,
   timelineAt,
@@ -71,48 +72,63 @@ describe('markFrame', () => {
 });
 
 describe('revealFrame', () => {
-  it('has punch == 1 at both ends (no seam with neighbouring scenes)', () => {
-    expect(revealFrame(0).punch).toBeCloseTo(1, 10);
-    expect(revealFrame(1).punch).toBeCloseTo(1, 10);
-  });
-
-  it('starts with the mark fully shown and the pieces hidden', () => {
+  it('starts with the mark fully shown and the slices closed/hidden', () => {
     const f = revealFrame(0);
     expect(f.out1).toBeCloseTo(1, 10);
     expect(f.in2).toBe(0);
-    expect(f.q).toBe(0);
-    expect(f.onexOpacity).toBe(0);
+    expect(f.u).toBe(0);
   });
 
-  it('ends with the mark gone and the onexion band fully open', () => {
+  it('ends with the mark gone and the word fully open', () => {
     const f = revealFrame(1);
     expect(f.out1).toBe(0);
-    expect(f.q).toBeCloseTo(1, 10);
-    expect(f.onexRightInset).toBeCloseTo(37.11, 2);
+    expect(f.in2).toBeCloseTo(1, 10);
+    expect(f.u).toBeCloseTo(1, 10);
+  });
+
+  it('fades the slices in before fading the mark out (no flash at handoff)', () => {
+    // Slices reach full opacity while the mark is still (partly) visible.
+    expect(revealFrame(0.12).in2).toBeCloseTo(1, 10);
+    expect(revealFrame(0.12).out1).toBeGreaterThan(0);
   });
 });
 
-describe('pieceFrame', () => {
-  it('lands every piece on the final logotype at q=1 (no offset, scale 1)', () => {
-    for (const key of ['C', 'seven'] as const) {
-      const f = pieceFrame(key, 1);
-      expect(f.tx).toBeCloseTo(0, 10);
-      expect(f.ty).toBeCloseTo(0, 10);
-      expect(f.scale).toBeCloseTo(1, 10);
-    }
+describe('the reveal slices tile the logotype', () => {
+  it('the three band widths sum to the full logo width', () => {
+    expect(BAND.C.w + BAND.onexion.w + BAND.seven.w).toBeCloseTo(LOGO_W, 6);
+  });
+});
+
+describe('revealLayout', () => {
+  it('opens to the exact final logotype tiling at u=1', () => {
+    const l = revealLayout(1);
+    expect(l.cLeft).toBeCloseTo(0, 10);
+    expect(l.onexLeft).toBeCloseTo(BAND.C.w, 10);
+    expect(l.onexWidth).toBeCloseTo(BAND.onexion.w, 10);
+    expect(l.sevenLeft).toBeCloseTo(BAND.C.w + BAND.onexion.w, 10);
   });
 
-  it('starts each piece at its measured offset and scale (q=0)', () => {
-    const c = pieceFrame('C', 0);
-    expect(c.tx).toBeCloseTo(PIECES.C.from[0], 10);
-    expect(c.scale).toBeCloseTo(PIECES.C.scale, 10);
-    // The C sits over the mark scaled UP (mark C is bigger than logotype C).
-    expect(c.scale).toBeGreaterThan(1);
+  it('closes to a centred C7400 with no onexion at u=0', () => {
+    const l = revealLayout(0);
+    expect(l.cLeft).toBeCloseTo(CLOSED_C_LEFT, 10);
+    expect(l.onexWidth).toBe(0);
+    // C and 7400 sit flush against each other (nothing between them).
+    expect(l.sevenLeft).toBeCloseTo(l.cLeft + BAND.C.w, 10);
   });
 
-  it('moves the 7400 piece leftward from the mark toward the logotype', () => {
-    // 7400 in the mark is left of where it lands, so its start tx is negative.
-    expect(pieceFrame('seven', 0).tx).toBeLessThan(0);
+  it('opens the word: C slides left and 7400 slides right, onexion grows', () => {
+    const start = revealLayout(0);
+    const end = revealLayout(1);
+    expect(end.cLeft).toBeLessThan(start.cLeft); // C moves left
+    expect(end.sevenLeft).toBeGreaterThan(start.sevenLeft); // 7400 moves right
+    expect(end.onexWidth).toBeGreaterThan(start.onexWidth); // onexion opens
+  });
+
+  it('keeps the C and 7400 slices at full width throughout (never vanish)', () => {
+    // Widths are fixed constants; only positions animate — the glyphs can't
+    // disappear mid-reveal (the bug this replaced).
+    expect(BAND.C.w).toBeGreaterThan(0);
+    expect(BAND.seven.w).toBeGreaterThan(0);
   });
 });
 

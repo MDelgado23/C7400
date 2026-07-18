@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { SplashScreen } from './src/ui/organisms/SplashScreen';
+import { ConexionIntro } from './src/ui/organisms/intro/ConexionIntro';
 import { loadRemoteConfig } from './src/core/config/remoteConfig';
 import { initAudio, play } from './src/core/audio/audioService';
 import { usePlayerStore } from './src/core/store/playerStore';
@@ -20,7 +20,7 @@ const MAX_SPLASH_MS = 8000;
 
 export default function App() {
   const playerState = usePlayerStore((s) => s.state);
-  // The splash's intro animation has played out (minimum on-screen time).
+  // The intro animation has played out (minimum on-screen time).
   const [animationDone, setAnimationDone] = useState(false);
   // App revealed → swap the splash for the navigator.
   const [ready, setReady] = useState(false);
@@ -48,18 +48,18 @@ export default function App() {
     return () => clearTimeout(cap);
   }, []);
 
-  const handleSplashFinish = useCallback(() => setAnimationDone(true), []);
+  const handleIntroFinish = useCallback(() => setAnimationDone(true), []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          {/* Dark icons over the white splash; light icons over the dark app. */}
+          {/* Dark icons over the white intro; light icons over the dark app. */}
           <StatusBar style={ready ? 'light' : 'dark'} />
           {ready ? (
             <RootNavigator />
           ) : (
-            <SplashScreen onFinish={handleSplashFinish} />
+            <ConexionIntro onFinish={handleIntroFinish} />
           )}
         </QueryClientProvider>
       </SafeAreaProvider>

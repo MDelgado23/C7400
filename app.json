@@ -43,13 +43,7 @@
           "enableBackgroundPlayback": true
         }
       ],
-      "expo-asset",
-      [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#ffffff"
-        }
-      ]
+      "expo-asset"
     ],
     "extra": {
       "eas": {

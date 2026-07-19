@@ -5,34 +5,32 @@ import {
   dotOpacity,
   finaleFrame,
   LOGO_W,
-  MARK_FIT,
-  markFrame,
   revealFrame,
   revealLayout,
+  REVEAL_HOLD,
   SCENES,
   TOTAL_DUR,
   timelineAt,
 } from '../introScenes';
 
 describe('timelineAt', () => {
-  it('starts on the Mark scene', () => {
+  it('starts on the Reveal scene', () => {
     const pos = timelineAt(0);
-    expect(pos.name).toBe('Mark');
+    expect(pos.name).toBe('Reveal');
     expect(pos.progress).toBe(0);
     expect(pos.done).toBe(false);
   });
 
   it('clamps negative time to the start of the intro', () => {
-    expect(timelineAt(-2)).toMatchObject({ name: 'Mark', progress: 0 });
+    expect(timelineAt(-2)).toMatchObject({ name: 'Reveal', progress: 0 });
   });
 
-  it('hands off to the next scene exactly on the boundary', () => {
-    expect(timelineAt(1.5)).toMatchObject({ name: 'Reveal', progress: 0 });
-    expect(timelineAt(3.0)).toMatchObject({ name: 'Finale', progress: 0 });
+  it('hands off to the finale exactly on the boundary', () => {
+    expect(timelineAt(2.5)).toMatchObject({ name: 'Finale', progress: 0 });
   });
 
   it('reports the scene-local time (drives the finale dot loop)', () => {
-    expect(timelineAt(3.5).localTime).toBeCloseTo(0.5, 10);
+    expect(timelineAt(3.0).localTime).toBeCloseTo(0.5, 10);
   });
 
   it('ends done on the last scene at full progress', () => {
@@ -54,43 +52,30 @@ describe('timelineAt', () => {
   });
 });
 
-describe('markFrame', () => {
-  it('starts invisible and small', () => {
-    const f = markFrame(0);
-    expect(f.opacity).toBe(0);
-    expect(f.scale).toBeCloseTo(0.55, 10);
-  });
-
-  it('lands on EXACTLY opacity 1 / scale 1 to match Reveal’s first frame', () => {
-    const f = markFrame(1);
-    expect(f.opacity).toBeCloseTo(1, 10);
-    expect(f.scale).toBeCloseTo(1, 10);
-  });
-
-  it('is fully opaque by the 16% mark', () => {
-    expect(markFrame(0.16).opacity).toBeCloseTo(1, 10);
-  });
-});
-
 describe('revealFrame', () => {
-  it('starts with the mark fully shown and the slices closed/hidden', () => {
+  it('starts hidden and closed', () => {
     const f = revealFrame(0);
-    expect(f.out1).toBeCloseTo(1, 10);
     expect(f.in2).toBe(0);
     expect(f.u).toBe(0);
   });
 
-  it('ends with the mark gone and the word fully open', () => {
-    const f = revealFrame(1);
-    expect(f.out1).toBe(0);
-    expect(f.in2).toBeCloseTo(1, 10);
-    expect(f.u).toBeCloseTo(1, 10);
+  it('fades the compact word in quickly at the very start', () => {
+    expect(revealFrame(0.06).in2).toBeCloseTo(1, 10);
   });
 
-  it('fades the slices in before fading the mark out (no flash at handoff)', () => {
-    // Slices reach full opacity while the mark is still (partly) visible.
-    expect(revealFrame(0.12).in2).toBeCloseTo(1, 10);
-    expect(revealFrame(0.12).out1).toBeGreaterThan(0);
+  it('HOLDS on the compact word (u stays 0) through the ~1s pause', () => {
+    expect(revealFrame(REVEAL_HOLD / 2).u).toBe(0);
+    expect(revealFrame(REVEAL_HOLD).u).toBe(0);
+  });
+
+  it('opens only after the hold', () => {
+    expect(revealFrame(REVEAL_HOLD + 0.2).u).toBeGreaterThan(0);
+  });
+
+  it('ends fully open and visible', () => {
+    const f = revealFrame(1);
+    expect(f.in2).toBeCloseTo(1, 10);
+    expect(f.u).toBeCloseTo(1, 10);
   });
 });
 
@@ -166,12 +151,9 @@ describe('geometry constants', () => {
     expect(LOGO_W).toBeLessThan(1080);
   });
 
-  it('shrinks the mark to match the reveal-compact size (no shrink-on-handoff)', () => {
-    // The mark's glyphs are larger than the logotype's, so MARK_FIT must be < 1.
-    expect(MARK_FIT).toBeGreaterThan(0);
-    expect(MARK_FIT).toBeLessThan(1);
-    // Sanity: it lands around the measured ~0.57, not a no-op or a near-zero.
-    expect(MARK_FIT).toBeGreaterThan(0.45);
-    expect(MARK_FIT).toBeLessThan(0.7);
+  it('spends about a second holding on the compact word before opening', () => {
+    // REVEAL_HOLD is a fraction of the 2.5s Reveal scene ≈ 1s.
+    expect(SCENES[0].name).toBe('Reveal');
+    expect(REVEAL_HOLD * SCENES[0].dur).toBeCloseTo(1.0, 6);
   });
 });

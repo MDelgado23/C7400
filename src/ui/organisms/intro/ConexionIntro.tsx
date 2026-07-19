@@ -16,8 +16,6 @@ import {
   finaleFrame,
   LOGO_H,
   LOGO_W,
-  MARK_FIT,
-  markFrame,
   revealFrame,
   revealLayout,
   STAGE,
@@ -45,7 +43,6 @@ import {
  * stage is scaled to the device width once, so the geometry never changes.
  */
 
-const IMG_MARK = require('../../../../assets/intro-mark.png'); // uploads/1.png — "C7400"
 const IMG_LOGOTYPE = require('../../../../assets/intro-logotype.png'); // uploads/2.png — "Conexion7400"
 
 const NAVY = '#1b3f8f'; // brand navy — the finale loading dots
@@ -122,30 +119,13 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
     return undefined;
   }, [clock, onFinish, reduceMotion]);
 
-  // Scene 1 — the mark pops in and settles. MARK_FIT shrinks it so its "C7400"
-  // matches the reveal's compact "C7400" (no size jump at the handoff).
-  const markStyle = useAnimatedStyle(() => {
-    const pos = timelineAt(clock.value);
-    if (pos.name !== 'Mark') return { opacity: 0 };
-    const f = markFrame(pos.progress);
-    return { opacity: f.opacity, transform: [{ scale: f.scale * MARK_FIT }] };
-  });
-
-  // Scene 2 — the reveal group is just shown/hidden; the slices carry the motion.
+  // Scene 1 — the reveal group is just shown/hidden; the slices carry the motion.
   const revealGroupStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     return { opacity: pos.name === 'Reveal' ? 1 : 0 };
   });
 
-  // The mark fading out UNDER the slices once they're fully opaque — at the same
-  // MARK_FIT size, so it lines up with the compact word during the crossfade.
-  const revealMarkStyle = useAnimatedStyle(() => {
-    const pos = timelineAt(clock.value);
-    const f = revealFrame(pos.name === 'Reveal' ? pos.progress : 0);
-    return { opacity: f.out1, transform: [{ scale: MARK_FIT }] };
-  });
-
-  // Scene 3 — hold on the logotype with a slow push-in.
+  // Scene 2 — hold on the logotype with a slow push-in.
   const finaleLogoStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     const active = pos.name === 'Finale';
@@ -164,18 +144,14 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
       <View style={{ width: STAGE.width, height: STAGE.height, transform: [{ scale: stageScale }] }}>
         <View style={styles.center}>
           <View style={styles.logoBox}>
-            {/* Scene 1 */}
-            <Animated.Image source={IMG_MARK} resizeMode="stretch" style={[styles.fill, markStyle]} />
-
-            {/* Scene 2 — mark fades out underneath; the three slices open the word on top */}
+            {/* Scene 1 — the three slices hold on "C7400" then open the word */}
             <Animated.View style={[styles.fill, revealGroupStyle]}>
-              <Animated.Image source={IMG_MARK} resizeMode="stretch" style={[styles.fill, revealMarkStyle]} />
               <RevealSlice which="C" clock={clock} />
               <RevealSlice which="onexion" clock={clock} />
               <RevealSlice which="seven" clock={clock} />
             </Animated.View>
 
-            {/* Scene 3 */}
+            {/* Scene 2 */}
             <Animated.Image source={IMG_LOGOTYPE} resizeMode="stretch" style={[styles.fill, finaleLogoStyle]} />
           </View>
         </View>

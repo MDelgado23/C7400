@@ -16,7 +16,7 @@
  *   img1 (mark)      C: x594–1170 c(882,1243)   7400: x1212–2914 c(2063,1259)
  *   img2 (logotype)  C: x260–552  c(406,1140)   7400: x2220–3242 c(2731,1189)
  */
-import { clamp, easeInOutCubic, easeOutBack, easeOutQuad } from './easings';
+import { clamp, easeInOutCubic, easeOutQuad } from './easings';
 
 /** Reference stage the geometry is authored in. */
 export const STAGE = { width: 1080, height: 1920 } as const;
@@ -28,12 +28,13 @@ export const LOGO_H = LOGO_W * LOGO_AR;
 
 /** Ordered scenes with their on-screen durations (seconds). */
 export interface SceneDef {
-  name: 'Mark' | 'Reveal' | 'Finale';
+  name: 'Reveal' | 'Finale';
   dur: number;
 }
 export const SCENES: readonly SceneDef[] = [
-  { name: 'Mark', dur: 1.5 },
-  { name: 'Reveal', dur: 1.5 },
+  // Reveal holds on the compact "C7400" for the first second (see REVEAL_HOLD),
+  // then opens over the rest — no separate mark scene.
+  { name: 'Reveal', dur: 2.5 },
   { name: 'Finale', dur: 2.2 },
 ] as const;
 
@@ -54,7 +55,7 @@ export interface TimelinePos {
 
 /**
  * Map global elapsed time (seconds) to the active scene and its local progress.
- * Before 0 → Mark at 0; at/after TOTAL_DUR → Finale at 1 with `done: true`.
+ * Before 0 → Reveal at 0; at/after TOTAL_DUR → Finale at 1 with `done: true`.
  */
 export function timelineAt(t: number): TimelinePos {
   'worklet';
@@ -81,27 +82,7 @@ export function timelineAt(t: number): TimelinePos {
   return { index: SCENES.length - 1, name: last.name, progress: 1, localTime: last.dur, done: true };
 }
 
-// ── Scene 1: Mark ─────────────────────────────────────────────────────────
-export interface MarkFrame {
-  opacity: number;
-  scale: number;
-}
-
-/**
- * The C7400 mark pops in (easeOutBack) and takes one gentle "breath" before
- * settling. By design the last frame is EXACTLY scale 1 / opacity 1 so it
- * matches Reveal's first frame with no visible seam.
- */
-export function markFrame(p: number): MarkFrame {
-  'worklet';
-  const pop = 0.55 + 0.45 * easeOutBack(clamp(p / 0.34, 0, 1));
-  const opacity = clamp(p / 0.16, 0, 1);
-  // sin(2π·x) returns to 0 at x=1, so the breath vanishes on the final frame.
-  const settle = p > 0.34 ? 0.011 * Math.sin(2 * Math.PI * clamp((p - 0.34) / 0.66, 0, 1)) : 0;
-  return { opacity, scale: pop + settle };
-}
-
-// ── Scene 2: Reveal ───────────────────────────────────────────────────────
+// ── Scene 1: Reveal ───────────────────────────────────────────────────────
 /**
  * The reveal composes the final logotype from three horizontal slices of the
  * SAME logotype image — the "C", the middle "onexion", and the "7400". It opens
@@ -135,22 +116,6 @@ export const BAND: Record<'C' | 'onexion' | 'seven', Band> = {
 /** Left offset (stage px) of the C when the word is closed (C+7400 centred). */
 export const CLOSED_C_LEFT = (LOGO_W - (BAND.C.w + BAND.seven.w)) / 2;
 
-/**
- * The mark's "C7400" glyphs are drawn much larger than the same glyphs in the
- * logotype (its 7400 is ~1.67× and its C ~1.97× the logotype's), so a full-size
- * mark visibly SHRINKS as it hands off to the reveal. Scale the mark down so its
- * "C7400" footprint matches the reveal's compact "C7400" — no size jump.
- *
- * Both spans are measured from the reference glyph boxes (px, 3508-wide image):
- *   mark:     C-left 594 → 7400-right 2914
- *   logotype: C-left 260 → 7400-right 3242 (compacted, the C-slice's left pad and
- *             the CLOSED_C_LEFT offset cancel out, so the span is position-free)
- */
-const MARK_C7400_SPAN = (2914 - 594) / 3508; // ≈ 0.6613 of the width
-const REVEAL_COMPACT_SPAN =
-  BAND.C.w / LOGO_W - BAND.seven.imgLeft / LOGO_W + (3242 - 260) / 3508; // ≈ 0.3797
-export const MARK_FIT = REVEAL_COMPACT_SPAN / MARK_C7400_SPAN; // ≈ 0.574
-
 export interface RevealLayout {
   /** Left offset (stage px) of the C slice. */
   cLeft: number;
@@ -172,28 +137,29 @@ export function revealLayout(u: number): RevealLayout {
   return { cLeft, onexLeft, onexWidth, sevenLeft };
 }
 
+/** Fraction of the Reveal scene spent holding on the compact "C7400" (~1s). */
+export const REVEAL_HOLD = 1.0 / 2.5; // ≈ 0.4 of the 2.5s Reveal scene
+
 export interface RevealFrame {
-  /** Opacity of the logotype slices fading in over the mark. */
+  /** Opacity of the logotype slices fading in at the start. */
   in2: number;
-  /** Opacity of the mark (img1) fading out underneath. */
-  out1: number;
   /** Opening progress for the slices (0 closed → 1 open). */
   u: number;
 }
 
 /**
- * Slices fade in ON TOP of the mark first, then the mark fades out underneath
- * (no dip/flash), and the word opens across the rest of the scene.
+ * The compact "C7400" fades in, HOLDS for ~1s (REVEAL_HOLD), then the word opens
+ * across the rest of the scene: the C slides left, the 7400 slides right, and
+ * "onexion" wipes in between them.
  */
 export function revealFrame(p: number): RevealFrame {
   'worklet';
-  const in2 = clamp(p / 0.12, 0, 1);
-  const out1 = 1 - clamp((p - 0.08) / 0.16, 0, 1);
-  const u = easeInOutCubic(clamp((p - 0.08) / 0.84, 0, 1));
-  return { in2, out1, u };
+  const in2 = clamp(p / 0.06, 0, 1);
+  const u = easeInOutCubic(clamp((p - REVEAL_HOLD) / (1 - REVEAL_HOLD), 0, 1));
+  return { in2, u };
 }
 
-// ── Scene 3: Finale ───────────────────────────────────────────────────────
+// ── Scene 2: Finale ───────────────────────────────────────────────────────
 export interface FinaleFrame {
   /** Slow cinematic push-in. */
   zoom: number;

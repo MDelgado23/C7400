@@ -5,6 +5,7 @@ import {
   dotOpacity,
   finaleFrame,
   LOGO_W,
+  MARK_FIT,
   markFrame,
   revealFrame,
   revealLayout,
@@ -163,5 +164,14 @@ describe('dotOpacity', () => {
 describe('geometry constants', () => {
   it('keeps the logo within the reference stage width', () => {
     expect(LOGO_W).toBeLessThan(1080);
+  });
+
+  it('shrinks the mark to match the reveal-compact size (no shrink-on-handoff)', () => {
+    // The mark's glyphs are larger than the logotype's, so MARK_FIT must be < 1.
+    expect(MARK_FIT).toBeGreaterThan(0);
+    expect(MARK_FIT).toBeLessThan(1);
+    // Sanity: it lands around the measured ~0.57, not a no-op or a near-zero.
+    expect(MARK_FIT).toBeGreaterThan(0.45);
+    expect(MARK_FIT).toBeLessThan(0.7);
   });
 });

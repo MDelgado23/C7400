@@ -16,6 +16,7 @@ import {
   finaleFrame,
   LOGO_H,
   LOGO_W,
+  MARK_FIT,
   markFrame,
   revealFrame,
   revealLayout,
@@ -121,12 +122,13 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
     return undefined;
   }, [clock, onFinish, reduceMotion]);
 
-  // Scene 1 — the mark pops in and settles.
+  // Scene 1 — the mark pops in and settles. MARK_FIT shrinks it so its "C7400"
+  // matches the reveal's compact "C7400" (no size jump at the handoff).
   const markStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     if (pos.name !== 'Mark') return { opacity: 0 };
     const f = markFrame(pos.progress);
-    return { opacity: f.opacity, transform: [{ scale: f.scale }] };
+    return { opacity: f.opacity, transform: [{ scale: f.scale * MARK_FIT }] };
   });
 
   // Scene 2 — the reveal group is just shown/hidden; the slices carry the motion.
@@ -135,11 +137,12 @@ export function ConexionIntro({ onFinish }: ConexionIntroProps) {
     return { opacity: pos.name === 'Reveal' ? 1 : 0 };
   });
 
-  // The mark fading out UNDER the slices once they're fully opaque.
+  // The mark fading out UNDER the slices once they're fully opaque — at the same
+  // MARK_FIT size, so it lines up with the compact word during the crossfade.
   const revealMarkStyle = useAnimatedStyle(() => {
     const pos = timelineAt(clock.value);
     const f = revealFrame(pos.name === 'Reveal' ? pos.progress : 0);
-    return { opacity: f.out1 };
+    return { opacity: f.out1, transform: [{ scale: MARK_FIT }] };
   });
 
   // Scene 3 — hold on the logotype with a slow push-in.

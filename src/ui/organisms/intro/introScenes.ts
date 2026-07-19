@@ -135,6 +135,22 @@ export const BAND: Record<'C' | 'onexion' | 'seven', Band> = {
 /** Left offset (stage px) of the C when the word is closed (C+7400 centred). */
 export const CLOSED_C_LEFT = (LOGO_W - (BAND.C.w + BAND.seven.w)) / 2;
 
+/**
+ * The mark's "C7400" glyphs are drawn much larger than the same glyphs in the
+ * logotype (its 7400 is ~1.67× and its C ~1.97× the logotype's), so a full-size
+ * mark visibly SHRINKS as it hands off to the reveal. Scale the mark down so its
+ * "C7400" footprint matches the reveal's compact "C7400" — no size jump.
+ *
+ * Both spans are measured from the reference glyph boxes (px, 3508-wide image):
+ *   mark:     C-left 594 → 7400-right 2914
+ *   logotype: C-left 260 → 7400-right 3242 (compacted, the C-slice's left pad and
+ *             the CLOSED_C_LEFT offset cancel out, so the span is position-free)
+ */
+const MARK_C7400_SPAN = (2914 - 594) / 3508; // ≈ 0.6613 of the width
+const REVEAL_COMPACT_SPAN =
+  BAND.C.w / LOGO_W - BAND.seven.imgLeft / LOGO_W + (3242 - 260) / 3508; // ≈ 0.3797
+export const MARK_FIT = REVEAL_COMPACT_SPAN / MARK_C7400_SPAN; // ≈ 0.574
+
 export interface RevealLayout {
   /** Left offset (stage px) of the C slice. */
   cLeft: number;

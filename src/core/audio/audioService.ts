@@ -1,0 +1,272 @@
+import {
+  createAudioPlayer,
+  setAudioModeAsync,
+  requestNotificationPermissionsAsync,
+  type AudioPlayer,
+  type AudioStatus,
+  type AudioMetadata,
+} from 'expo-audio';
+import {
+  usePlayerStore,
+  toggleIntent,
+  type NowPlaying,
+} from '../store/playerStore';
+import {
+  addNetworkStateListener,
+  getNetworkStateAsync,
+  type NetworkState,
+} from 'expo-network';
+import { mapStatusToEvent } from './statusMapping';
+import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
+import { validArtworkUrl } from './artworkUrl';
+
+/**
+ * audioService — the impure bridge between expo-audio and the player store.
+ *
+ * All native side effects live here. The pure decision logic is delegated:
+ * status→event mapping to `statusMapping`, and toggle direction to the store's
+ * `toggleIntent`. This module is intentionally thin and is exercised by E2E
+ * tests (Phase 5), not unit tests.
+ */
+
+let player: AudioPlayer | null = null;
+let currentStreamUrl: string | null = null;
+let reconnectAttempt = 0;
+
+/**
+ * Live network state, kept fresh by the listener below, so a stream drop can be
+ * classified (offline vs. server error) synchronously. `null` reachability = the
+ * OS hasn't decided; the strategy treats that as "maybe online".
+ */
+let lastNetworkState: NetworkStateLike = {
+  isConnected: true,
+  isInternetReachable: null,
+};
+/** Set when a drop happened offline: reconnect the instant the network returns. */
+let awaitingNetwork = false;
+let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
+/**
+ * Handle of the armed backoff reconnect. Kept so it can be cancelled: a manual
+ * retry, a play from the error state or a teardown all supersede it, and a
+ * stale timer firing afterwards would reload the source and cut audio that is
+ * already playing again.
+ */
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Fallback now-playing used to activate lock-screen controls the moment audio
+ * starts, before any real program metadata arrives. Activating the lock screen
+ * is what starts the Android media foreground service that keeps background
+ * playback alive — without it the OS kills the stream shortly after backgrounding.
+ */
+const DEFAULT_NOW_PLAYING: NowPlaying = { title: 'En vivo' };
+
+/**
+ * Station badge URL (from remote config) used as the lock-screen / media-
+ * notification artwork when a live program has no image of its own. Must be a
+ * real HTTP(S) URL — a bundled asset resolves to a scheme-less id in release,
+ * which expo-audio rejects with MalformedURLException — so it's validated.
+ */
+let stationLogoUri: string | undefined;
+
+/** Publishes now-playing metadata to the OS lock screen (live = no scrub bar). */
+function pushLockScreen(np: NowPlaying): void {
+  if (!player) return;
+  const metadata: AudioMetadata = {
+    title: np.title,
+    artist: 'LU32',
+    // Program image when we have one, otherwise the station badge so the media
+    // notification / lock screen is never blank on the live stream. BOTH are
+    // validated: a scheme-less artworkUrl crashes setActiveForLockScreen.
+    artworkUrl: validArtworkUrl(np.imageUrl) ?? stationLogoUri,
+  };
+  // Defensive: a bad metadata/artwork value must never crash playback. This runs
+  // from UI events (toggle) where an uncaught throw is a hard app crash.
+  try {
+    player.setActiveForLockScreen(true, metadata, { isLiveStream: true });
+  } catch {
+    // Lock-screen controls are best-effort; audio keeps playing regardless.
+  }
+}
+
+/**
+ * Initialize the engine for a live stream. `doNotMix` is REQUIRED for
+ * lock-screen controls and for sustained (>3 min) Android background playback.
+ */
+export async function initAudio(streamUrl: string, logoUrl?: string): Promise<void> {
+  // Station badge for the lock-screen / notification artwork. Validated here so
+  // a bad value can never reach setActiveForLockScreen; undefined just means the
+  // notification has no large artwork (Android still shows the app icon).
+  stationLogoUri = validArtworkUrl(logoUrl);
+
+  // Android 13+: the media-playback foreground service can only post its
+  // controls notification with POST_NOTIFICATIONS granted. Without it the OS
+  // kills background audio after ~18s and no shade/lock-screen controls appear.
+  // iOS is a no-op here (handled system-side).
+  await requestNotificationPermissionsAsync();
+
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    interruptionMode: 'doNotMix',
+  });
+
+  // Track connectivity so a drop can be told apart from a server-side failure.
+  // Seed synchronously-ish, then keep it live: reconnect the moment WiFi returns
+  // after a screen-off drop, instead of burning timed retries against no route.
+  getNetworkStateAsync()
+    .then((state) => {
+      lastNetworkState = toNetworkStateLike(state);
+    })
+    .catch(() => {});
+  netSubscription?.remove();
+  netSubscription = addNetworkStateListener(onNetworkChange);
+
+  currentStreamUrl = streamUrl;
+  player = createAudioPlayer(streamUrl);
+  player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+    const event = mapStatusToEvent(status);
+    if (!event) return;
+    usePlayerStore.getState().applyEvent(event);
+    if (event === 'PLAYING') {
+      reconnectAttempt = 0; // healthy stream — reset backoff
+      awaitingNetwork = false;
+    } else if (event === 'ERROR') {
+      handleStreamDrop();
+    }
+  });
+}
+
+/** Narrow expo-network's `NetworkState` to what the reconnect policy reads. */
+function toNetworkStateLike(state: NetworkState): NetworkStateLike {
+  return {
+    isConnected: state.isConnected ?? false,
+    isInternetReachable: state.isInternetReachable ?? null,
+  };
+}
+
+/**
+ * React to connectivity changes. When we're parked waiting for the network and
+ * it comes back, reconnect immediately with a fresh backoff budget — this is
+ * what makes the stream resume the instant the screen turns back on.
+ */
+function onNetworkChange(state: NetworkState): void {
+  lastNetworkState = toNetworkStateLike(state);
+  const online =
+    lastNetworkState.isConnected && lastNetworkState.isInternetReachable !== false;
+  if (awaitingNetwork && online) {
+    awaitingNetwork = false;
+    reconnectAttempt = 0; // network restored → not a failed retry, start clean
+    reconnect();
+  }
+}
+
+export function play(): void {
+  const state = usePlayerStore.getState().state;
+  // Live sync: resuming a paused live stream would play a stale, behind-air
+  // buffer, and a stream that errored has no usable source left, so both need a
+  // reload to jump back to the live edge. A fresh start is already at the edge.
+  if ((state === 'paused' || state === 'error') && player && currentStreamUrl) {
+    player.replace(currentStreamUrl);
+  }
+  // Playing out of `error` IS a manual retry (the mini-player renders a ▶ there),
+  // so it takes over the reconnect budget and disarms any armed backoff, which
+  // would otherwise fire later and reload the source under a recovered stream.
+  if (state === 'error') {
+    cancelPendingReconnect();
+    reconnectAttempt = 0;
+    awaitingNetwork = false;
+  }
+  player?.play();
+  usePlayerStore.getState().applyEvent('PLAY');
+  // Activate lock-screen controls on every playback start. This is what spins up
+  // the media foreground service; without it Android tears down background audio.
+  pushLockScreen(usePlayerStore.getState().program ?? DEFAULT_NOW_PLAYING);
+  // NOTE: the Doze/battery-optimization exemption is intentionally NOT prompted
+  // here. Autoplay calls play() on launch, and an auto-firing system dialog would
+  // collide with the persistent BackgroundPlaybackNotice. The notice is now the
+  // single, user-initiated path to the exemption (see useBackgroundPlaybackWarning).
+}
+
+export function pause(): void {
+  player?.pause();
+  usePlayerStore.getState().applyEvent('PAUSE');
+}
+
+/** Toggle: pure decision from store state, impure effect on the engine. */
+export function toggle(): void {
+  if (toggleIntent(usePlayerStore.getState().state) === 'play') play();
+  else pause();
+}
+
+/** Disarm the pending backoff reconnect, if any. Safe to call unconditionally. */
+function cancelPendingReconnect(): void {
+  if (reconnectTimer === null) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+}
+
+/** Low-level reconnect: reload the live source and play. Does NOT reset backoff. */
+function reconnect(): void {
+  cancelPendingReconnect();
+  usePlayerStore.getState().applyEvent('RETRY');
+  if (player && currentStreamUrl) {
+    player.replace(currentStreamUrl);
+    player.play();
+  }
+}
+
+/**
+ * Decide what to do after a stream drop based on attempts AND live network:
+ * park until connectivity returns when offline, timed backoff when online, or
+ * give up once online retries are exhausted (user retries manually from the UI).
+ */
+function handleStreamDrop(): void {
+  // `error` stays set on the engine status until the source is replaced, so the
+  // listener re-reports the same drop on every tick. Without this guard each
+  // tick would arm its own timer and spend an attempt, stacking reconnects and
+  // burning the budget to `give-up` in seconds.
+  if (reconnectTimer !== null || awaitingNetwork) return;
+
+  const action = reconnectStrategy(reconnectAttempt, lastNetworkState);
+  switch (action.kind) {
+    case 'await-network':
+      awaitingNetwork = true; // onNetworkChange fires reconnect when WiFi returns
+      return;
+    case 'backoff':
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        reconnect();
+      }, action.delayMs);
+      return;
+    case 'give-up':
+      return; // stays in error; user retries manually
+  }
+}
+
+/** Manual retry from the error UI: reset backoff and reconnect immediately. */
+export function retry(): void {
+  reconnectAttempt = 0;
+  awaitingNetwork = false;
+  reconnect(); // disarms the pending backoff before reloading
+}
+
+/** Update now-playing across the store and the lock screen. */
+export function setNowPlaying(np: NowPlaying): void {
+  usePlayerStore.getState().setProgram(np);
+  pushLockScreen(np);
+}
+
+/** Free native resources, stop listening for connectivity, clear controls. */
+export function teardownAudio(): void {
+  // Before releasing the player: a timer surviving teardown would push RETRY
+  // into the store with no engine behind it, spinning the UI forever.
+  cancelPendingReconnect();
+  netSubscription?.remove();
+  netSubscription = null;
+  awaitingNetwork = false;
+  player?.clearLockScreenControls();
+  player?.remove();
+  player = null;
+}

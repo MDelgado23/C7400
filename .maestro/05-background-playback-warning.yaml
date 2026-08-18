@@ -1,0 +1,36 @@
+# Spec 5.6 — background-playback warning (feat: harden background playback).
+#
+# When the app is NOT exempt from battery optimization, the Radio screen shows a
+# notice with a one-tap fix. Tapping "Activar" MUST open the OS exemption dialog
+# — this is exactly the path a missing REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+# manifest permission would silently break (the button would do nothing). This
+# flow is the end-to-end regression guard for that class of bug: unit tests pass
+# even when the native permission is absent, but this flow fails.
+#
+# PRECONDITION: the app must be non-exempt from battery optimization. That is the
+# default on a fresh install. `clearState` resets app state but NOT the OS
+# whitelist, so run this on a clean device / CI image — a device that already
+# granted the exemption will not show the notice.
+#
+# LOCALE: the app and this device's system UI are Spanish (es-AR); the system
+# dialog button labels ("Permitir" / "Denegar") are matched accordingly.
+appId: ar.com.lu32.radio
+---
+- launchApp:
+    clearState: true
+# The loading splash plays first (~1.8s), then autoplay reveals the Radio screen
+# with the notice. The exemption is prompted ONLY by tapping "Activar" below —
+# play() no longer auto-fires the system dialog, so no dialog appears on its own.
+- extendedWaitUntil:
+    visible: 'La radio puede cortarse en segundo plano'
+    timeout: 12000
+- tapOn: 'Activar'
+# The system exemption dialog must appear. "Permitir" is a system-dialog button
+# only (the in-app notice's only action is "Activar"), so matching it here
+# unambiguously proves the intent fired and the manifest permission is present.
+- extendedWaitUntil:
+    visible: 'Permitir'
+    timeout: 5000
+# Decline to leave the app non-exempt, keeping this flow idempotent/re-runnable.
+- tapOn: 'Denegar'
+- assertVisible: 'La radio puede cortarse en segundo plano'

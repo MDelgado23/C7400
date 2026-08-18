@@ -1,0 +1,19 @@
+# Spec 5.2 — background playback. Partially automatable: we background and
+# foreground the app and assert playback survived. The LOCK-SCREEN controls and
+# actual audible continuation must be checked manually on a real device (Maestro
+# cannot read the OS lock screen or listen to audio).
+appId: ar.com.lu32.radio
+---
+- launchApp
+# Autoplay: after the loading splash the stream starts on its own — wait for the
+# playing state instead of tapping. The background-playback notice may overlay
+# the top of the Radio screen but does not block anything.
+- extendedWaitUntil:
+    visible: 'Pausar'
+    timeout: 12000
+- pressKey: Home
+# MANUAL: confirm audio keeps playing and lock-screen shows play/pause + LU32.
+- launchApp
+- extendedWaitUntil:
+    visible: 'Pausar'
+    timeout: 12000

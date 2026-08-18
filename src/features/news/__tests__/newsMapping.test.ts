@@ -4,6 +4,7 @@ import {
   mapArticleDetail,
   parseArticleList,
   pickImageUrl,
+  pickThumbUrl,
   type TadevelArticle,
 } from '../newsMapping';
 
@@ -32,13 +33,37 @@ function article(overrides: Partial<TadevelArticle> = {}): TadevelArticle {
 }
 
 describe('pickImageUrl', () => {
-  it('selects the largest-width file for a crisp card image', () => {
+  it('selects the largest-width file for a crisp full-bleed hero', () => {
     expect(pickImageUrl(photoAsset)).toBe('https://cdn/t720.jpeg');
   });
 
   it('returns undefined when there is no usable photo asset', () => {
     expect(pickImageUrl(null)).toBeUndefined();
     expect(pickImageUrl({ id: 'x', files: [] })).toBeUndefined();
+  });
+});
+
+describe('pickThumbUrl', () => {
+  it('selects the smallest file that still covers the thumb size', () => {
+    // The feed thumb is 72pt. Handing it the 720px original downloads the full
+    // resolution over mobile data to render a postage stamp.
+    expect(pickThumbUrl(photoAsset)).toBe('https://cdn/t360.jpeg');
+  });
+
+  it('falls back to the largest file when none reaches the target width', () => {
+    const small = {
+      id: 'asset2',
+      files: [
+        { url: 'https://cdn/s80.jpeg', width: 80 },
+        { url: 'https://cdn/s120.jpeg', width: 120 },
+      ],
+    };
+    expect(pickThumbUrl(small)).toBe('https://cdn/s120.jpeg');
+  });
+
+  it('returns undefined when there is no usable photo asset', () => {
+    expect(pickThumbUrl(null)).toBeUndefined();
+    expect(pickThumbUrl({ id: 'x', files: [] })).toBeUndefined();
   });
 });
 
@@ -55,6 +80,10 @@ describe('mapArticle', () => {
 
   it('uses photoAsset for the image, never the broken thumbnailUrl', () => {
     expect(mapArticle(article()).imageUrl).toBe('https://cdn/t720.jpeg');
+  });
+
+  it('carries a separate thumb URL so the feed does not fetch the hero', () => {
+    expect(mapArticle(article()).thumbUrl).toBe('https://cdn/t360.jpeg');
   });
 
   it('falls back to an empty summary when the deck is missing', () => {

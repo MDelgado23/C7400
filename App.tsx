@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ConexionIntro } from './src/ui/organisms/intro/ConexionIntro';
 import { loadRemoteConfig } from './src/core/config/remoteConfig';
-import { initAudio, play } from './src/core/audio/audioService';
+import { initAudio, play, teardownAudio } from './src/core/audio/audioService';
 import { usePlayerStore } from './src/core/store/playerStore';
 import { shouldRevealApp } from './src/core/store/appReadiness';
 
@@ -29,11 +29,20 @@ export default function App() {
     // Boot the audio engine, then start playback IMMEDIATELY so the stream buffers
     // UNDER the splash instead of flashing a "loading" state after it. Failures
     // surface through the player's error/retry UI, so we don't block on them.
+    let cancelled = false;
     void (async () => {
       const { streamUrl, stationLogoUrl } = await loadRemoteConfig();
+      if (cancelled) return;
       await initAudio(streamUrl, stationLogoUrl);
+      if (cancelled) return;
       play();
     })().catch(() => undefined);
+    // Release the native player and the connectivity subscription. The guard
+    // above keeps a boot still in flight from re-creating them after teardown.
+    return () => {
+      cancelled = true;
+      teardownAudio();
+    };
   }, []);
 
   // Reveal once the animation has played AND the stream is truly playing (or has

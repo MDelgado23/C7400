@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { isBackgroundPlaybackAtRisk } from '../../core/audio/backgroundPlayback';
 import { requestIgnoreBatteryOptimizations } from '../../core/audio/batteryOptimization';
+import { trackEvent } from '../../core/observability/observability';
+import { EVENTS } from '../../core/observability/events';
 
 interface BackgroundPlaybackWarning {
   /** Whether to show the notice: the app is at risk (not exempt from Doze). */
@@ -34,8 +36,15 @@ export function useBackgroundPlaybackWarning(): BackgroundPlaybackWarning {
 
   const enable = useCallback(() => {
     // Explicit user action → force past the once-per-session auto guard.
-    void requestIgnoreBatteryOptimizations({ force: true }).then(refresh);
-  }, [refresh]);
+    void requestIgnoreBatteryOptimizations({ force: true }).then(async () => {
+      const stillAtRisk = await isBackgroundPlaybackAtRisk();
+      setAtRisk(stillAtRisk);
+      // Reported only on this deliberate path, not on every foreground re-check:
+      // what we want to know is how often asking actually works. Some OEMs land
+      // the grant on "Optimizado", which reads as granted but is not enough.
+      trackEvent(EVENTS.BATTERY_EXEMPTION, { granted: !stillAtRisk });
+    });
+  }, []);
 
   return { visible: atRisk, enable };
 }

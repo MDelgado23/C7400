@@ -11,6 +11,9 @@
  * Remote Config later without touching call sites — the contract is this module.
  */
 
+import { trackEvent } from '../observability/observability';
+import { EVENTS } from '../observability/events';
+
 export interface AppConfig {
   /** Live radio stream (audio/mpeg over HTTPS — iOS ATS friendly). */
   streamUrl: string;
@@ -90,7 +93,14 @@ async function fetchConfig(): Promise<AppConfig> {
     if (!res.ok) throw new Error(`config HTTP ${res.status}`);
     const remote = sanitize(await res.json());
     cached = { ...FALLBACK_CONFIG, ...remote };
-  } catch {
+  } catch (error) {
+    // Worth reporting: the app is now serving baked-in defaults, so a rotated
+    // stream port would silently take the radio off air for everyone affected.
+    // The error NAME (AbortError, TypeError…) keeps cardinality low — a timeout
+    // on a bad network is expected, a sustained rate of it is not.
+    trackEvent(EVENTS.CONFIG_FALLBACK_USED, {
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
     cached = FALLBACK_CONFIG;
   } finally {
     clearTimeout(timeout);

@@ -65,15 +65,28 @@ const STREAM_URL = 'https://stream.lu32.test/live';
 type AudioService = typeof import('../audioService');
 type PlayerStoreModule = typeof import('../../store/playerStore');
 
+type ObservabilityModule = typeof import('../../observability/observability');
+
 let audio: AudioService;
 let store: PlayerStoreModule['usePlayerStore'];
+let sink: { logEvent: jest.Mock; logScreen: jest.Mock; recordError: jest.Mock };
 
 /** Fresh module registry so the service's module-level state doesn't leak. */
 async function loadService(): Promise<void> {
   jest.resetModules();
   audio = require('../audioService');
   store = (require('../../store/playerStore') as PlayerStoreModule).usePlayerStore;
+  // Registered before init so the permission path is observed from the start.
+  sink = { logEvent: jest.fn(), logScreen: jest.fn(), recordError: jest.fn() };
+  (require('../../observability/observability') as ObservabilityModule).setObservabilitySink(
+    sink,
+  );
   await audio.initAudio(STREAM_URL);
+}
+
+/** Names of the events reported so far, in order. */
+function reportedEvents(): string[] {
+  return sink.logEvent.mock.calls.map(([name]) => name as string);
 }
 
 /** Drive the engine callback the service registered in initAudio. */
@@ -229,6 +242,58 @@ describe('initAudio lifecycle', () => {
     // Overwriting `player` without releasing it leaves two native players on the
     // same stream — audible double audio on a remount.
     expect(mockPlayer.remove).toHaveBeenCalled();
+  });
+});
+
+describe('observability', () => {
+  it('reports playback starting, once per transition into playing', () => {
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitStatus({ playing: true, timeControlStatus: 'playing' }); // still playing
+
+    expect(reportedEvents().filter((e) => e === 'playback_started')).toHaveLength(1);
+  });
+
+  it('reports a drop with the attempt count and whether we were offline', () => {
+    emitDrop();
+
+    expect(sink.logEvent).toHaveBeenCalledWith('stream_drop', {
+      attempt: 0,
+      offline: 'false',
+    });
+  });
+
+  it('reports giving up once the reconnect budget is exhausted', () => {
+    // MAX_RECONNECT_ATTEMPTS backoffs, then the next drop gives up. This is the
+    // event that matters most: the radio is dead and nothing threw.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+
+    expect(reportedEvents()).toContain('stream_give_up');
+  });
+
+  it('does not report giving up while retries remain', () => {
+    emitDrop();
+    jest.advanceTimersByTime(60_000);
+
+    expect(reportedEvents()).not.toContain('stream_give_up');
+  });
+
+  it('reports a refused notification permission', async () => {
+    mockAudio.permission = Promise.resolve({ granted: false });
+    await loadService();
+    await flushMicrotasks();
+
+    expect(reportedEvents()).toContain('notif_permission_denied');
+  });
+
+  it('says nothing when the notification permission is granted', async () => {
+    mockAudio.permission = Promise.resolve({ granted: true });
+    await loadService();
+    await flushMicrotasks();
+
+    expect(reportedEvents()).not.toContain('notif_permission_denied');
   });
 });
 

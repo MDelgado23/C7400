@@ -2,6 +2,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NewsFeedScreen } from '../features/news/NewsFeedScreen';
 import { ArticleDetailScreen } from '../features/news/ArticleDetailScreen';
 import { colors } from '../ui/theme';
+import { trackEvent } from '../core/observability/observability';
+import { EVENTS } from '../core/observability/events';
 
 export type NewsStackParamList = {
   NewsFeed: undefined;
@@ -23,7 +25,10 @@ export function NewsStack() {
       <Stack.Screen name="NewsFeed" options={{ title: 'Noticias' }}>
         {({ navigation }) => (
           <NewsFeedScreen
-            onSelectArticle={(item) => navigation.navigate('ArticleDetail', { id: item.id })}
+            onSelectArticle={(item) => {
+              trackEvent(EVENTS.ARTICLE_OPENED, { article_id: item.id });
+              navigation.navigate('ArticleDetail', { id: item.id });
+            }}
           />
         )}
       </Stack.Screen>

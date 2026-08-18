@@ -19,6 +19,8 @@ import {
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
 import { validArtworkUrl } from './artworkUrl';
+import { trackEvent } from '../observability/observability';
+import { EVENTS } from '../observability/events';
 
 /**
  * audioService — the impure bridge between expo-audio and the player store.
@@ -153,8 +155,14 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
     const event = mapStatusToEvent(status);
     if (!event) return;
+    const previous = usePlayerStore.getState().state;
     usePlayerStore.getState().applyEvent(event);
     if (event === 'PLAYING') {
+      // Only on the transition: the engine reports `playing` on every tick, and
+      // this is the denominator every failure rate is measured against.
+      if (previous !== 'playing') {
+        trackEvent(EVENTS.PLAYBACK_STARTED, { resumed: previous === 'paused' });
+      }
       reconnectAttempt = 0; // healthy stream — reset backoff
       awaitingNetwork = false;
     } else if (event === 'ERROR') {
@@ -168,8 +176,11 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   // when the grant lands so the service is armed for a playback that already
   // began — nothing else would do it, since pushLockScreen is only reachable
   // from play(). Chained after the player exists so it always has one.
-  void permission.then(() => {
+  void permission.then((result) => {
     if (generation !== initGeneration) return;
+    // Worth reporting on its own: without POST_NOTIFICATIONS the foreground
+    // service cannot post, and background audio dies ~18s after a screen lock.
+    if (result?.granted === false) trackEvent(EVENTS.NOTIF_PERMISSION_DENIED);
     // Not started yet: play() will arm the session itself.
     if (usePlayerStore.getState().state === 'idle') return;
     pushLockScreen(usePlayerStore.getState().program ?? DEFAULT_NOW_PLAYING);
@@ -269,6 +280,13 @@ function handleStreamDrop(): void {
   if (reconnectTimer !== null || awaitingNetwork) return;
 
   const action = reconnectStrategy(reconnectAttempt, lastNetworkState);
+  // `offline` is read off the policy's own decision rather than recomputed, so
+  // the report can never disagree with what the service actually did.
+  trackEvent(EVENTS.STREAM_DROP, {
+    attempt: reconnectAttempt,
+    offline: action.kind === 'await-network',
+  });
+
   switch (action.kind) {
     case 'await-network':
       awaitingNetwork = true; // onNetworkChange fires reconnect when WiFi returns
@@ -281,6 +299,9 @@ function handleStreamDrop(): void {
       }, action.delayMs);
       return;
     case 'give-up':
+      // The one that matters: the listener's radio is dead, and no exception
+      // was ever thrown for a crash reporter to catch.
+      trackEvent(EVENTS.STREAM_GIVE_UP, { attempt: reconnectAttempt });
       return; // stays in error; user retries manually
   }
 }

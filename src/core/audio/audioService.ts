@@ -225,7 +225,17 @@ function onNetworkChange(state: NetworkState): void {
   lastNetworkState = toNetworkStateLike(state);
   const online =
     lastNetworkState.isConnected && lastNetworkState.isInternetReachable !== false;
-  if (awaitingNetwork && online) {
+  if (!online) return;
+  // `awaitingNetwork` is a drop that parked here deliberately. `gaveUp` is the
+  // budget running out — and that case CANNOT rely on awaitingNetwork, because
+  // once the budget is spent the engine tears its track down and stops emitting
+  // playbackStatusUpdate. `handleStreamDrop` has a single call site inside that
+  // listener, so it never runs again to park us, and connectivity returning is
+  // the only signal left. Verified on a Moto G35: without this the app sat in
+  // `error` with WiFi back and the stream reachable until the listener pressed
+  // play. Both flags are cleared by resetReconnectBudget, so a later handover on
+  // a healthy stream falls through and never reloads the source under live audio.
+  if (awaitingNetwork || gaveUp) {
     resetReconnectBudget(); // network restored → not a failed retry, start clean
     reconnect();
   }

@@ -152,7 +152,7 @@ describe('reconnect scheduling', () => {
     expect(mockPlayer.replace).toHaveBeenCalledTimes(1);
   });
 
-  it('still recovers on its own when the network returns after giving up', () => {
+  it('recovers when the network returns after giving up, with no further engine ticks', () => {
     // The documented root-cause case: on a screen-off WiFi park the OS reports
     // `isInternetReachable: null`, which counts as online, so the whole budget
     // burns against a route that is already dead. Only afterwards does the OS
@@ -161,17 +161,33 @@ describe('reconnect scheduling', () => {
       emitDrop();
       jest.advanceTimersByTime(60_000);
     }
+    mockPlayer.replace.mockClear();
+
+    // NOTHING is emitted from the engine past this point, and that is the whole
+    // point of the test. On a device, once the budget is spent expo-audio tears
+    // its track down and stops delivering playbackStatusUpdate — verified on a
+    // Moto G35, where the app sat in `error` with WiFi back and reachable until
+    // the listener pressed play. `handleStreamDrop` has a single call site
+    // inside that listener, so it can never run again to set `awaitingNetwork`.
+    // Connectivity returning is the ONLY signal left to recover from.
     mockNetwork.listener?.({ isConnected: false, isInternetReachable: false });
-    emitDrop(); // engine still repeating the error, but now it reads as offline
+    mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
+
+    expect(mockPlayer.replace).toHaveBeenCalled();
+  });
+
+  it('does not reconnect on a network change while the stream is healthy', () => {
+    // The recovery above keys off connectivity rather than off a parked drop,
+    // so it must stay narrow: a WiFi→cellular handover mid-song reaches the same
+    // listener, and reloading the source there would cut audio that is playing
+    // perfectly well.
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
     mockPlayer.replace.mockClear();
 
     mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
 
-    // Parking on the network is the ONLY way back: the give-up branch arms no
-    // timer. If the drop handler stays latched shut after giving up, the drop
-    // above never reaches `await-network` and the listener is stranded on the
-    // error screen until they tap retry by hand.
-    expect(mockPlayer.replace).toHaveBeenCalled();
+    expect(mockPlayer.replace).not.toHaveBeenCalled();
   });
 
   it('does not let a late network snapshot clobber a live listener update', async () => {

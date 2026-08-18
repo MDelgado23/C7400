@@ -40,6 +40,16 @@ describe('mapStatusToEvent (pure status → event)', () => {
     expect(mapStatusToEvent(status({ timeControlStatus: 'paused' }))).toBe('PAUSE');
   });
 
+  it('keeps PAUSE when the engine is still buffering under an explicit pause', () => {
+    // Pausing mid-rebuffer is the common case on a flaky live stream: the engine
+    // reports isBuffering until the source is released. Reporting BUFFERING here
+    // flips the store out of `paused`, and toggleIntent('buffering') is 'pause',
+    // so the next tap pauses again and the user can never resume.
+    expect(
+      mapStatusToEvent(status({ isBuffering: true, playing: false, timeControlStatus: 'paused' })),
+    ).toBe('PAUSE');
+  });
+
   it('returns null when nothing meaningful changed', () => {
     expect(mapStatusToEvent(status())).toBeNull();
   });

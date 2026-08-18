@@ -90,7 +90,14 @@ async function fetchConfig(): Promise<AppConfig> {
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(REMOTE_CONFIG_URL, { signal: controller.signal });
-    if (!res.ok) throw new Error(`config HTTP ${res.status}`);
+    if (!res.ok) {
+      const httpError = new Error(`config HTTP ${res.status}`);
+      // Carried on `name` so the report distinguishes a 404 — the failure most
+      // likely to actually happen, since it means the document moved — from any
+      // other generic throw. Status codes keep the cardinality bounded.
+      httpError.name = `http_${res.status}`;
+      throw httpError;
+    }
     const remote = sanitize(await res.json());
     cached = { ...FALLBACK_CONFIG, ...remote };
   } catch (error) {

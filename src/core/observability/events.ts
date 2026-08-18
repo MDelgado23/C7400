@@ -72,11 +72,16 @@ export function sanitizeParams(params: EventParams): EventParams {
       clean[key] = value.slice(0, MAX_STRING_VALUE_LENGTH);
     } else if (typeof value === 'number') {
       if (Number.isFinite(value)) clean[key] = value;
-    } else {
+    } else if (typeof value === 'boolean') {
       // Analytics documents string/number only; stringify so the dashboard
       // shows `true`/`false` rather than a silently dropped parameter.
       clean[key] = value ? 'true' : 'false';
     }
+    // Anything else is dropped. The types say this cannot happen, but payloads
+    // are built from API responses that are typed and never validated, so an
+    // absent field would otherwise be coerced and reported as `"false"` —
+    // indistinguishable from real data, in the module whose job is to stop
+    // exactly that.
   }
   return clean;
 }

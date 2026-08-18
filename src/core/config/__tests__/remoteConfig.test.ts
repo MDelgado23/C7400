@@ -60,6 +60,18 @@ describe('loadRemoteConfig', () => {
     });
   });
 
+  it('reports the HTTP status when the config document is missing', async () => {
+    // A 404 means the document moved — the most likely real failure, and the
+    // one worth telling apart from a generic throw.
+    mockFetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+
+    await loadRemoteConfig();
+
+    expect(sink.logEvent).toHaveBeenCalledWith('config_fallback_used', {
+      reason: 'http_404',
+    });
+  });
+
   it('says nothing when the remote config loads fine', async () => {
     mockFetch.mockResolvedValue(okResponse({}));
 

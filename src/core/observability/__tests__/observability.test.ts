@@ -66,6 +66,34 @@ describe('trackError', () => {
     expect(context).toBe('audio');
   });
 
+  it('keeps the message of a native rejection that is not an Error', () => {
+    // expo native modules reject with a plain `{ code, message }`. `String(...)`
+    // on one of those is "[object Object]": a report carrying none of the
+    // information it was added to capture, and every such report collapsing
+    // into a single provider issue.
+    const sink = fakeSink();
+    setObservabilitySink(sink);
+
+    trackError(
+      { code: 'E_ARTWORK', message: 'MalformedURLException: no protocol' },
+      'pushLockScreen',
+    );
+
+    const [error] = sink.recordError.mock.calls[0];
+    expect(error.message).toBe('E_ARTWORK: MalformedURLException: no protocol');
+  });
+
+  it('attaches the original value as the error cause', () => {
+    const sink = fakeSink();
+    setObservabilitySink(sink);
+    const original = { code: 'E_ARTWORK', message: 'no protocol' };
+
+    trackError(original);
+
+    const [error] = sink.recordError.mock.calls[0];
+    expect(error.cause).toBe(original);
+  });
+
   it('passes a real Error through untouched', () => {
     const sink = fakeSink();
     setObservabilitySink(sink);

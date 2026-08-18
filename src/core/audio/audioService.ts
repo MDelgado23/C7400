@@ -19,7 +19,7 @@ import {
 import { mapStatusToEvent } from './statusMapping';
 import { reconnectStrategy, type NetworkStateLike } from './reconnectPolicy';
 import { validArtworkUrl } from './artworkUrl';
-import { trackEvent } from '../observability/observability';
+import { trackEvent, trackError } from '../observability/observability';
 import { EVENTS } from '../observability/events';
 
 /**
@@ -68,12 +68,21 @@ let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
  */
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 /**
- * Latched once the reconnect budget is spent. The give-up branch arms no timer,
- * so nothing else throttles the report: the engine repeats the same error status
- * on every tick and each one would report another drop. Cleared whenever the
- * budget is reset.
+ * Latched once the reconnect budget is spent. The give-up branch arms no timer
+ * and parks on no network, so without this nothing throttles re-entry: the
+ * engine re-reports the same error on every tick and each one would report
+ * another drop. Cleared whenever the budget is reset.
  */
 let gaveUp = false;
+/**
+ * Set when a playback START was requested, cleared once the engine confirms it.
+ * The store state cannot tell a start apart from a mid-stream rebuffer — both
+ * sit in `buffering` — and counting rebuffer recoveries would inflate the
+ * denominator exactly in proportion to the failure rate it divides.
+ */
+let pendingStart = false;
+/** Whether the pending start is a resume from an explicit pause. */
+let pendingStartResumed = false;
 
 /**
  * Fallback now-playing used to activate lock-screen controls the moment audio
@@ -106,8 +115,12 @@ function pushLockScreen(np: NowPlaying): void {
   // from UI events (toggle) where an uncaught throw is a hard app crash.
   try {
     player.setActiveForLockScreen(true, metadata, { isLiveStream: true });
-  } catch {
+  } catch (error) {
     // Lock-screen controls are best-effort; audio keeps playing regardless.
+    // Reported rather than swallowed silently: this exact catch is where a
+    // scheme-less artworkUrl once threw MalformedURLException, and it took a
+    // device on adb to find it because nothing surfaced.
+    trackError(error, 'pushLockScreen');
   }
 }
 
@@ -162,13 +175,14 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
     const event = mapStatusToEvent(status);
     if (!event) return;
-    const previous = usePlayerStore.getState().state;
     usePlayerStore.getState().applyEvent(event);
     if (event === 'PLAYING') {
-      // Only on the transition: the engine reports `playing` on every tick, and
-      // this is the denominator every failure rate is measured against.
-      if (previous !== 'playing') {
-        trackEvent(EVENTS.PLAYBACK_STARTED, { resumed: previous === 'paused' });
+      // Only for a start we actually asked for. A rebuffer recovering, or an
+      // automatic reconnect, is the SAME session continuing — counting those
+      // would inflate the denominator every failure rate is measured against.
+      if (pendingStart) {
+        pendingStart = false;
+        trackEvent(EVENTS.PLAYBACK_STARTED, { resumed: pendingStartResumed });
       }
       resetReconnectBudget(); // healthy stream
     } else if (event === 'ERROR') {
@@ -232,6 +246,10 @@ export function play(): void {
     cancelPendingReconnect();
     resetReconnectBudget();
   }
+  // Read before applyEvent below moves the store to `buffering`, which would
+  // otherwise make every resume look like a fresh start.
+  pendingStart = true;
+  pendingStartResumed = state === 'paused';
   player?.play();
   usePlayerStore.getState().applyEvent('PLAY');
   // Activate lock-screen controls on every playback start. This is what spins up
@@ -244,6 +262,10 @@ export function play(): void {
 }
 
 export function pause(): void {
+  // Abandons a start the engine never confirmed. An armed backoff can still
+  // reach `playing` on its own afterwards, and reporting that as a start would
+  // credit a session the listener had already told us to stop.
+  pendingStart = false;
   player?.pause();
   usePlayerStore.getState().applyEvent('PAUSE');
 }
@@ -331,6 +353,12 @@ function handleStreamDrop(): void {
 /** Manual retry from the error UI: reset backoff and reconnect immediately. */
 export function retry(): void {
   resetReconnectBudget();
+  // Same standing as play(): the error screen wires "Reintentar" here while the
+  // mini-player's ▶ over the same state goes through play(), so leaving this out
+  // would drop recovery sessions from the denominator in exact proportion to how
+  // often the stream fails. Never a resume — this path only exists out of error.
+  pendingStart = true;
+  pendingStartResumed = false;
   reconnect(); // disarms the pending backoff before reloading
 }
 
@@ -350,6 +378,7 @@ export function teardownAudio(): void {
   netSubscription?.remove();
   netSubscription = null;
   networkObserved = false;
+  pendingStart = false;
   resetReconnectBudget();
   player?.clearLockScreenControls();
   player?.remove();

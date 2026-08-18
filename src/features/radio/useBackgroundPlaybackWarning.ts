@@ -36,12 +36,15 @@ export function useBackgroundPlaybackWarning(): BackgroundPlaybackWarning {
 
   const enable = useCallback(() => {
     // Explicit user action → force past the once-per-session auto guard.
-    void requestIgnoreBatteryOptimizations({ force: true }).then(async () => {
+    void requestIgnoreBatteryOptimizations({ force: true }).then(async (result) => {
       const stillAtRisk = await isBackgroundPlaybackAtRisk();
       setAtRisk(stillAtRisk);
-      // Reported only on this deliberate path, not on every foreground re-check:
-      // what we want to know is how often asking actually works. Some OEMs land
-      // the grant on "Optimizado", which reads as granted but is not enough.
+      // Only when a dialog actually opened. On 'error'/'unsupported' nothing was
+      // ever shown, and reporting `granted: false` there would count a device
+      // that could not ask as a listener who refused — two very different
+      // numbers. Reported on this deliberate path only, never on the foreground
+      // re-check: what we want to know is how often asking actually works.
+      if (result !== 'requested') return;
       trackEvent(EVENTS.BATTERY_EXEMPTION, { granted: !stillAtRisk });
     });
   }, []);

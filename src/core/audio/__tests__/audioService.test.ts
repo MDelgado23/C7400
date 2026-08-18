@@ -168,9 +168,9 @@ describe('reconnect scheduling', () => {
     mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
 
     // Parking on the network is the ONLY way back: the give-up branch arms no
-    // timer. If the drop handler stayed latched shut after giving up, the drop
-    // above would never reach `await-network` and the listener would be
-    // stranded on the error screen until they tapped retry by hand.
+    // timer. If the drop handler stays latched shut after giving up, the drop
+    // above never reaches `await-network` and the listener is stranded on the
+    // error screen until they tap retry by hand.
     expect(mockPlayer.replace).toHaveBeenCalled();
   });
 
@@ -268,11 +268,85 @@ describe('initAudio lifecycle', () => {
 });
 
 describe('observability', () => {
-  it('reports playback starting, once per transition into playing', () => {
+  it('reports playback starting once, not on every playing tick', () => {
+    audio.play();
     emitStatus({ playing: true, timeControlStatus: 'playing' });
     emitStatus({ playing: true, timeControlStatus: 'playing' }); // still playing
 
     expect(reportedEvents().filter((e) => e === 'playback_started')).toHaveLength(1);
+  });
+
+  it('does not count a mid-stream rebuffer as a new playback start', () => {
+    // The denominator has to stay a count of playback SESSIONS. Counting every
+    // rebuffer recovery inflates it in proportion to how flaky the connection
+    // is — which systematically understates the very drop rate it divides.
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitStatus({ isBuffering: true, playing: false }); // rebuffer mid-stream
+    emitStatus({ playing: true, timeControlStatus: 'playing' }); // recovered
+
+    expect(reportedEvents().filter((e) => e === 'playback_started')).toHaveLength(1);
+  });
+
+  it('does not count an automatic reconnect as a new playback start', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitDrop();
+    jest.advanceTimersByTime(60_000); // backoff fires, source reloads
+    sink.logEvent.mockClear();
+
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(reportedEvents()).not.toContain('playback_started');
+  });
+
+  it('marks a resume from an explicit pause as resumed', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    audio.pause();
+    emitStatus({ timeControlStatus: 'paused' });
+    sink.logEvent.mockClear();
+
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'true' });
+  });
+
+  it('marks a fresh start as not resumed', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'false' });
+  });
+
+  it('reports a successful manual retry as a playback start', () => {
+    // The error screen wires "Reintentar" straight to retry(), while the
+    // mini-player's ▶ over the SAME error state goes through play(). Counting
+    // only one of them drops recovery sessions from the denominator in exact
+    // proportion to how often the stream fails.
+    emitDrop();
+    sink.logEvent.mockClear();
+
+    audio.retry();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'false' });
+  });
+
+  it('forgets a start the listener abandoned before it was confirmed', () => {
+    // Pausing an unconfirmed start abandons it. The armed backoff still fires
+    // and can reach `playing` on its own, and that is not a session anyone
+    // asked for — the listener had already said stop.
+    audio.play();
+    emitDrop(); // arms a backoff before the start was ever confirmed
+    audio.pause();
+    sink.logEvent.mockClear();
+
+    jest.advanceTimersByTime(60_000);
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(reportedEvents()).not.toContain('playback_started');
   });
 
   it('reports a drop with the attempt count and whether we were offline', () => {
@@ -297,7 +371,7 @@ describe('observability', () => {
 
   it('falls silent after giving up, however often the engine repeats the error', () => {
     // `error` stays set on the status until the source is replaced, and the
-    // give-up branch arms no timer, so nothing throttled the report: every tick
+    // give-up branch arms no timer, so nothing throttled re-entry: every tick
     // emitted another drop AND another give-up. A listener leaving the app open
     // on a dead stream would report at the engine's tick rate forever, and the
     // `attempt` distribution would be swamped by the terminal value.

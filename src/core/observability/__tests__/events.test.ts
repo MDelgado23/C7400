@@ -57,6 +57,20 @@ describe('sanitizeParams', () => {
     expect(sanitizeParams({ 'bad-key': 1, firebase_x: 2, ok: 3 })).toEqual({ ok: 3 });
   });
 
+  it('drops values that are neither string, number nor boolean', () => {
+    // Payloads are built from API responses that are typed but never validated
+    // at runtime, so an absent field reaches here as undefined. Coercing it
+    // would report `"false"` — indistinguishable from real data.
+    const payload = {
+      missing: undefined,
+      empty: null,
+      nested: { id: 1 },
+      ok: 'real',
+    } as unknown as Record<string, string>;
+
+    expect(sanitizeParams(payload)).toEqual({ ok: 'real' });
+  });
+
   it('drops non-finite numbers rather than sending NaN', () => {
     expect(sanitizeParams({ ratio: Number.NaN, count: Infinity, ok: 1 })).toEqual({
       ok: 1,

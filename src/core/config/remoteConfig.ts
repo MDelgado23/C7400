@@ -41,6 +41,12 @@ const REMOTE_CONFIG_URL =
 const FETCH_TIMEOUT_MS = 4000;
 
 let cached: AppConfig | null = null;
+/**
+ * The request while it is still open. App.tsx loads config at boot and the news
+ * feed loads it again on first render, so without this the two race and fire
+ * two requests — and on a dead network both pay the full FETCH_TIMEOUT_MS.
+ */
+let inFlight: Promise<AppConfig> | null = null;
 
 /** Keep only known string keys so a malformed remote doc can't inject junk. */
 function sanitize(input: unknown): Partial<AppConfig> {
@@ -65,7 +71,18 @@ function sanitize(input: unknown): Partial<AppConfig> {
  */
 export async function loadRemoteConfig(): Promise<AppConfig> {
   if (cached) return cached;
+  if (inFlight) return inFlight;
 
+  inFlight = fetchConfig();
+  try {
+    return await inFlight;
+  } finally {
+    inFlight = null;
+  }
+}
+
+/** The actual fetch. Never throws — a bad/absent remote doc falls back. */
+async function fetchConfig(): Promise<AppConfig> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -89,4 +106,5 @@ export function getFallbackConfig(): AppConfig {
 /** Test hook — clears the session cache. */
 export function __resetRemoteConfigCache(): void {
   cached = null;
+  inFlight = null;
 }

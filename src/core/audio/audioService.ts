@@ -67,6 +67,13 @@ let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
  * already playing again.
  */
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Latched once the reconnect budget is spent. The give-up branch arms no timer,
+ * so nothing else throttles the report: the engine repeats the same error status
+ * on every tick and each one would report another drop. Cleared whenever the
+ * budget is reset.
+ */
+let gaveUp = false;
 
 /**
  * Fallback now-playing used to activate lock-screen controls the moment audio
@@ -163,8 +170,7 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
       if (previous !== 'playing') {
         trackEvent(EVENTS.PLAYBACK_STARTED, { resumed: previous === 'paused' });
       }
-      reconnectAttempt = 0; // healthy stream — reset backoff
-      awaitingNetwork = false;
+      resetReconnectBudget(); // healthy stream
     } else if (event === 'ERROR') {
       handleStreamDrop();
     }
@@ -206,8 +212,7 @@ function onNetworkChange(state: NetworkState): void {
   const online =
     lastNetworkState.isConnected && lastNetworkState.isInternetReachable !== false;
   if (awaitingNetwork && online) {
-    awaitingNetwork = false;
-    reconnectAttempt = 0; // network restored → not a failed retry, start clean
+    resetReconnectBudget(); // network restored → not a failed retry, start clean
     reconnect();
   }
 }
@@ -225,8 +230,7 @@ export function play(): void {
   // would otherwise fire later and reload the source under a recovered stream.
   if (state === 'error') {
     cancelPendingReconnect();
-    reconnectAttempt = 0;
-    awaitingNetwork = false;
+    resetReconnectBudget();
   }
   player?.play();
   usePlayerStore.getState().applyEvent('PLAY');
@@ -248,6 +252,13 @@ export function pause(): void {
 export function toggle(): void {
   if (toggleIntent(usePlayerStore.getState().state) === 'play') play();
   else pause();
+}
+
+/** A healthy stream, or an explicit user action, restores the full budget. */
+function resetReconnectBudget(): void {
+  reconnectAttempt = 0;
+  awaitingNetwork = false;
+  gaveUp = false;
 }
 
 /** Disarm the pending backoff reconnect, if any. Safe to call unconditionally. */
@@ -280,12 +291,19 @@ function handleStreamDrop(): void {
   if (reconnectTimer !== null || awaitingNetwork) return;
 
   const action = reconnectStrategy(reconnectAttempt, lastNetworkState);
-  // `offline` is read off the policy's own decision rather than recomputed, so
-  // the report can never disagree with what the service actually did.
-  trackEvent(EVENTS.STREAM_DROP, {
-    attempt: reconnectAttempt,
-    offline: action.kind === 'await-network',
-  });
+  // `gaveUp` silences the REPORTING, never the policy. The repeated error ticks
+  // are the only thing that can still carry us to `await-network` if the OS
+  // admits the disconnection after the budget is already spent — which is
+  // exactly the screen-off WiFi park. Latching the whole handler shut there
+  // strands the listener on the error screen until they retry by hand.
+  if (!gaveUp) {
+    // `offline` is read off the policy's own decision rather than recomputed, so
+    // the report can never disagree with what the service actually did.
+    trackEvent(EVENTS.STREAM_DROP, {
+      attempt: reconnectAttempt,
+      offline: action.kind === 'await-network',
+    });
+  }
 
   switch (action.kind) {
     case 'await-network':
@@ -300,16 +318,19 @@ function handleStreamDrop(): void {
       return;
     case 'give-up':
       // The one that matters: the listener's radio is dead, and no exception
-      // was ever thrown for a crash reporter to catch.
-      trackEvent(EVENTS.STREAM_GIVE_UP, { attempt: reconnectAttempt });
+      // was ever thrown for a crash reporter to catch. Reported once — the
+      // status repeats on every tick and this arms no timer to throttle it.
+      if (!gaveUp) {
+        gaveUp = true;
+        trackEvent(EVENTS.STREAM_GIVE_UP, { attempt: reconnectAttempt });
+      }
       return; // stays in error; user retries manually
   }
 }
 
 /** Manual retry from the error UI: reset backoff and reconnect immediately. */
 export function retry(): void {
-  reconnectAttempt = 0;
-  awaitingNetwork = false;
+  resetReconnectBudget();
   reconnect(); // disarms the pending backoff before reloading
 }
 
@@ -329,7 +350,7 @@ export function teardownAudio(): void {
   netSubscription?.remove();
   netSubscription = null;
   networkObserved = false;
-  awaitingNetwork = false;
+  resetReconnectBudget();
   player?.clearLockScreenControls();
   player?.remove();
   player = null;

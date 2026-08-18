@@ -152,6 +152,28 @@ describe('reconnect scheduling', () => {
     expect(mockPlayer.replace).toHaveBeenCalledTimes(1);
   });
 
+  it('still recovers on its own when the network returns after giving up', () => {
+    // The documented root-cause case: on a screen-off WiFi park the OS reports
+    // `isInternetReachable: null`, which counts as online, so the whole budget
+    // burns against a route that is already dead. Only afterwards does the OS
+    // admit it is disconnected.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    mockNetwork.listener?.({ isConnected: false, isInternetReachable: false });
+    emitDrop(); // engine still repeating the error, but now it reads as offline
+    mockPlayer.replace.mockClear();
+
+    mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
+
+    // Parking on the network is the ONLY way back: the give-up branch arms no
+    // timer. If the drop handler stayed latched shut after giving up, the drop
+    // above would never reach `await-network` and the listener would be
+    // stranded on the error screen until they tapped retry by hand.
+    expect(mockPlayer.replace).toHaveBeenCalled();
+  });
+
   it('does not let a late network snapshot clobber a live listener update', async () => {
     // Cold launch with no connectivity: the initial getNetworkStateAsync snapshot
     // is still in flight when WiFi comes up and the listener reports it.
@@ -271,6 +293,37 @@ describe('observability', () => {
     }
 
     expect(reportedEvents()).toContain('stream_give_up');
+  });
+
+  it('falls silent after giving up, however often the engine repeats the error', () => {
+    // `error` stays set on the status until the source is replaced, and the
+    // give-up branch arms no timer, so nothing throttled the report: every tick
+    // emitted another drop AND another give-up. A listener leaving the app open
+    // on a dead stream would report at the engine's tick rate forever, and the
+    // `attempt` distribution would be swamped by the terminal value.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    expect(reportedEvents()).toContain('stream_give_up');
+    const afterGiveUp = sink.logEvent.mock.calls.length;
+
+    for (let i = 0; i < 20; i += 1) emitDrop();
+
+    expect(sink.logEvent.mock.calls).toHaveLength(afterGiveUp);
+  });
+
+  it('reports again once a manual retry revives the stream', () => {
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    sink.logEvent.mockClear();
+
+    audio.retry();
+    emitDrop();
+
+    expect(reportedEvents()).toContain('stream_drop');
   });
 
   it('does not report giving up while retries remain', () => {

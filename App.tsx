@@ -37,8 +37,9 @@ export default function App() {
       if (cancelled) return;
       play();
     })().catch(() => undefined);
-    // Release the native player and the connectivity subscription. The guard
-    // above keeps a boot still in flight from re-creating them after teardown.
+    // Release the native player and the connectivity subscription. A boot still
+    // in flight cannot re-create them afterwards: teardownAudio invalidates the
+    // init generation, so an initAudio resuming from an await bails out.
     return () => {
       cancelled = true;
       teardownAudio();

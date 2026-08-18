@@ -23,10 +23,18 @@ const mockPlayer = {
 };
 const mockListeners: Record<string, (status: PlaybackStatusLike) => void> = {};
 
+/** Lets a test hold the permission grant / audio-mode setup in flight. */
+const mockAudio: {
+  permission: Promise<unknown> | null;
+  audioMode: Promise<unknown> | null;
+} = { permission: null, audioMode: null };
+
 jest.mock('expo-audio', () => ({
   createAudioPlayer: jest.fn(() => mockPlayer),
-  setAudioModeAsync: jest.fn(async () => undefined),
-  requestNotificationPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  setAudioModeAsync: jest.fn(() => mockAudio.audioMode ?? Promise.resolve(undefined)),
+  requestNotificationPermissionsAsync: jest.fn(
+    () => mockAudio.permission ?? Promise.resolve({ granted: true }),
+  ),
 }));
 
 interface NetSnapshot {
@@ -90,8 +98,15 @@ beforeEach(async () => {
   jest.useFakeTimers();
   mockNetwork.seed = null;
   mockNetwork.listener = null;
+  mockAudio.permission = null;
+  mockAudio.audioMode = null;
   await loadService();
 });
+
+/** Flush pending microtask chains (the un-awaited init promises). */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) await Promise.resolve();
+}
 
 afterEach(() => {
   jest.useRealTimers();
@@ -157,6 +172,63 @@ describe('reconnect scheduling', () => {
     // A zombie reconnect would push RETRY into the store with no engine behind
     // it, leaving the UI spinning on `buffering` forever.
     expect(store.getState().state).toBe('error');
+  });
+});
+
+describe('initAudio lifecycle', () => {
+  it('re-arms the lock screen when the notification grant lands after playback started', async () => {
+    // First Android 13+ launch: POST_NOTIFICATIONS is still being asked while
+    // autoplay begins. The media foreground service that keeps background audio
+    // alive can only post its notification once the grant is in, so the session
+    // has to be activated again — otherwise the OS kills the stream after ~18s
+    // and the user gets no lock-screen controls.
+    let grant!: () => void;
+    mockAudio.permission = new Promise<void>((resolve) => {
+      grant = resolve;
+    });
+    await loadService();
+
+    audio.play(); // autoplay, dialog still unanswered
+    mockPlayer.setActiveForLockScreen.mockClear();
+
+    grant();
+    await flushMicrotasks();
+
+    expect(mockPlayer.setActiveForLockScreen).toHaveBeenCalled();
+  });
+
+  it('abandons an init that a teardown superseded', async () => {
+    // App unmounts while the boot effect is still suspended inside initAudio.
+    let finishAudioMode!: () => void;
+    mockAudio.audioMode = new Promise<void>((resolve) => {
+      finishAudioMode = resolve;
+    });
+    jest.resetModules();
+    audio = require('../audioService');
+    store = (require('../../store/playerStore') as PlayerStoreModule).usePlayerStore;
+
+    const booting = audio.initAudio(STREAM_URL); // suspends on setAudioModeAsync
+    audio.teardownAudio();
+    const createAudioPlayer = (require('expo-audio') as { createAudioPlayer: jest.Mock })
+      .createAudioPlayer;
+    createAudioPlayer.mockClear();
+
+    finishAudioMode();
+    await booting;
+
+    // Resuming must not resurrect the player or the connectivity subscription:
+    // nothing owns them after teardown, so they would leak past it.
+    expect(createAudioPlayer).not.toHaveBeenCalled();
+  });
+
+  it('releases the previous player when init runs again without a teardown', async () => {
+    mockPlayer.remove.mockClear();
+
+    await audio.initAudio(STREAM_URL); // re-init over a live player
+
+    // Overwriting `player` without releasing it leaves two native players on the
+    // same stream — audible double audio on a remount.
+    expect(mockPlayer.remove).toHaveBeenCalled();
   });
 });
 

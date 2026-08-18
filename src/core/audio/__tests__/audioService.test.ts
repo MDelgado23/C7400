@@ -65,15 +65,28 @@ const STREAM_URL = 'https://stream.lu32.test/live';
 type AudioService = typeof import('../audioService');
 type PlayerStoreModule = typeof import('../../store/playerStore');
 
+type ObservabilityModule = typeof import('../../observability/observability');
+
 let audio: AudioService;
 let store: PlayerStoreModule['usePlayerStore'];
+let sink: { logEvent: jest.Mock; logScreen: jest.Mock; recordError: jest.Mock };
 
 /** Fresh module registry so the service's module-level state doesn't leak. */
 async function loadService(): Promise<void> {
   jest.resetModules();
   audio = require('../audioService');
   store = (require('../../store/playerStore') as PlayerStoreModule).usePlayerStore;
+  // Registered before init so the permission path is observed from the start.
+  sink = { logEvent: jest.fn(), logScreen: jest.fn(), recordError: jest.fn() };
+  (require('../../observability/observability') as ObservabilityModule).setObservabilitySink(
+    sink,
+  );
   await audio.initAudio(STREAM_URL);
+}
+
+/** Names of the events reported so far, in order. */
+function reportedEvents(): string[] {
+  return sink.logEvent.mock.calls.map(([name]) => name as string);
 }
 
 /** Drive the engine callback the service registered in initAudio. */
@@ -137,6 +150,44 @@ describe('reconnect scheduling', () => {
     jest.advanceTimersByTime(60_000);
 
     expect(mockPlayer.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers when the network returns after giving up, with no further engine ticks', () => {
+    // The documented root-cause case: on a screen-off WiFi park the OS reports
+    // `isInternetReachable: null`, which counts as online, so the whole budget
+    // burns against a route that is already dead. Only afterwards does the OS
+    // admit it is disconnected.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    mockPlayer.replace.mockClear();
+
+    // NOTHING is emitted from the engine past this point, and that is the whole
+    // point of the test. On a device, once the budget is spent expo-audio tears
+    // its track down and stops delivering playbackStatusUpdate — verified on a
+    // Moto G35, where the app sat in `error` with WiFi back and reachable until
+    // the listener pressed play. `handleStreamDrop` has a single call site
+    // inside that listener, so it can never run again to set `awaitingNetwork`.
+    // Connectivity returning is the ONLY signal left to recover from.
+    mockNetwork.listener?.({ isConnected: false, isInternetReachable: false });
+    mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
+
+    expect(mockPlayer.replace).toHaveBeenCalled();
+  });
+
+  it('does not reconnect on a network change while the stream is healthy', () => {
+    // The recovery above keys off connectivity rather than off a parked drop,
+    // so it must stay narrow: a WiFi→cellular handover mid-song reaches the same
+    // listener, and reloading the source there would cut audio that is playing
+    // perfectly well.
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    mockPlayer.replace.mockClear();
+
+    mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
+
+    expect(mockPlayer.replace).not.toHaveBeenCalled();
   });
 
   it('does not let a late network snapshot clobber a live listener update', async () => {
@@ -229,6 +280,163 @@ describe('initAudio lifecycle', () => {
     // Overwriting `player` without releasing it leaves two native players on the
     // same stream — audible double audio on a remount.
     expect(mockPlayer.remove).toHaveBeenCalled();
+  });
+});
+
+describe('observability', () => {
+  it('reports playback starting once, not on every playing tick', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitStatus({ playing: true, timeControlStatus: 'playing' }); // still playing
+
+    expect(reportedEvents().filter((e) => e === 'playback_started')).toHaveLength(1);
+  });
+
+  it('does not count a mid-stream rebuffer as a new playback start', () => {
+    // The denominator has to stay a count of playback SESSIONS. Counting every
+    // rebuffer recovery inflates it in proportion to how flaky the connection
+    // is — which systematically understates the very drop rate it divides.
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitStatus({ isBuffering: true, playing: false }); // rebuffer mid-stream
+    emitStatus({ playing: true, timeControlStatus: 'playing' }); // recovered
+
+    expect(reportedEvents().filter((e) => e === 'playback_started')).toHaveLength(1);
+  });
+
+  it('does not count an automatic reconnect as a new playback start', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitDrop();
+    jest.advanceTimersByTime(60_000); // backoff fires, source reloads
+    sink.logEvent.mockClear();
+
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(reportedEvents()).not.toContain('playback_started');
+  });
+
+  it('marks a resume from an explicit pause as resumed', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    audio.pause();
+    emitStatus({ timeControlStatus: 'paused' });
+    sink.logEvent.mockClear();
+
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'true' });
+  });
+
+  it('marks a fresh start as not resumed', () => {
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'false' });
+  });
+
+  it('reports a successful manual retry as a playback start', () => {
+    // The error screen wires "Reintentar" straight to retry(), while the
+    // mini-player's ▶ over the SAME error state goes through play(). Counting
+    // only one of them drops recovery sessions from the denominator in exact
+    // proportion to how often the stream fails.
+    emitDrop();
+    sink.logEvent.mockClear();
+
+    audio.retry();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'false' });
+  });
+
+  it('forgets a start the listener abandoned before it was confirmed', () => {
+    // Pausing an unconfirmed start abandons it. The armed backoff still fires
+    // and can reach `playing` on its own, and that is not a session anyone
+    // asked for — the listener had already said stop.
+    audio.play();
+    emitDrop(); // arms a backoff before the start was ever confirmed
+    audio.pause();
+    sink.logEvent.mockClear();
+
+    jest.advanceTimersByTime(60_000);
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+
+    expect(reportedEvents()).not.toContain('playback_started');
+  });
+
+  it('reports a drop with the attempt count and whether we were offline', () => {
+    emitDrop();
+
+    expect(sink.logEvent).toHaveBeenCalledWith('stream_drop', {
+      attempt: 0,
+      offline: 'false',
+    });
+  });
+
+  it('reports giving up once the reconnect budget is exhausted', () => {
+    // MAX_RECONNECT_ATTEMPTS backoffs, then the next drop gives up. This is the
+    // event that matters most: the radio is dead and nothing threw.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+
+    expect(reportedEvents()).toContain('stream_give_up');
+  });
+
+  it('falls silent after giving up, however often the engine repeats the error', () => {
+    // `error` stays set on the status until the source is replaced, and the
+    // give-up branch arms no timer, so nothing throttled re-entry: every tick
+    // emitted another drop AND another give-up. A listener leaving the app open
+    // on a dead stream would report at the engine's tick rate forever, and the
+    // `attempt` distribution would be swamped by the terminal value.
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    expect(reportedEvents()).toContain('stream_give_up');
+    const afterGiveUp = sink.logEvent.mock.calls.length;
+
+    for (let i = 0; i < 20; i += 1) emitDrop();
+
+    expect(sink.logEvent.mock.calls).toHaveLength(afterGiveUp);
+  });
+
+  it('reports again once a manual retry revives the stream', () => {
+    for (let i = 0; i < 9; i += 1) {
+      emitDrop();
+      jest.advanceTimersByTime(60_000);
+    }
+    sink.logEvent.mockClear();
+
+    audio.retry();
+    emitDrop();
+
+    expect(reportedEvents()).toContain('stream_drop');
+  });
+
+  it('does not report giving up while retries remain', () => {
+    emitDrop();
+    jest.advanceTimersByTime(60_000);
+
+    expect(reportedEvents()).not.toContain('stream_give_up');
+  });
+
+  it('reports a refused notification permission', async () => {
+    mockAudio.permission = Promise.resolve({ granted: false });
+    await loadService();
+    await flushMicrotasks();
+
+    expect(reportedEvents()).toContain('notif_permission_denied');
+  });
+
+  it('says nothing when the notification permission is granted', async () => {
+    mockAudio.permission = Promise.resolve({ granted: true });
+    await loadService();
+    await flushMicrotasks();
+
+    expect(reportedEvents()).not.toContain('notif_permission_denied');
   });
 });
 

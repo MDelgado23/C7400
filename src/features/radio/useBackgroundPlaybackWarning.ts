@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { isBackgroundPlaybackAtRisk } from '../../core/audio/backgroundPlayback';
 import { requestIgnoreBatteryOptimizations } from '../../core/audio/batteryOptimization';
+import { trackEvent } from '../../core/observability/observability';
+import { EVENTS } from '../../core/observability/events';
 
 interface BackgroundPlaybackWarning {
   /** Whether to show the notice: the app is at risk (not exempt from Doze). */
@@ -34,8 +36,18 @@ export function useBackgroundPlaybackWarning(): BackgroundPlaybackWarning {
 
   const enable = useCallback(() => {
     // Explicit user action → force past the once-per-session auto guard.
-    void requestIgnoreBatteryOptimizations({ force: true }).then(refresh);
-  }, [refresh]);
+    void requestIgnoreBatteryOptimizations({ force: true }).then(async (result) => {
+      const stillAtRisk = await isBackgroundPlaybackAtRisk();
+      setAtRisk(stillAtRisk);
+      // Only when a dialog actually opened. On 'error'/'unsupported' nothing was
+      // ever shown, and reporting `granted: false` there would count a device
+      // that could not ask as a listener who refused — two very different
+      // numbers. Reported on this deliberate path only, never on the foreground
+      // re-check: what we want to know is how often asking actually works.
+      if (result !== 'requested') return;
+      trackEvent(EVENTS.BATTERY_EXEMPTION, { granted: !stillAtRisk });
+    });
+  }, []);
 
   return { visible: atRisk, enable };
 }

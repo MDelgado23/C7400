@@ -1,4 +1,9 @@
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { useRef } from 'react';
+import {
+  NavigationContainer,
+  DarkTheme,
+  useNavigationContainerRef,
+} from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { PlayerScreen } from '../features/radio/PlayerScreen';
@@ -6,6 +11,7 @@ import { NewsStack } from './NewsStack';
 import { MiniPlayer } from '../ui/organisms/MiniPlayer';
 import { shouldShowMiniPlayer, FULL_PLAYER_ROUTE } from './miniPlayerVisibility';
 import { colors } from '../ui/theme';
+import { trackScreen } from '../core/observability/observability';
 
 const Tab = createBottomTabNavigator();
 
@@ -30,8 +36,28 @@ const navTheme = {
  * playback.
  */
 export function RootNavigator() {
+  // Open param list: getCurrentRoute() resolves to the DEEPEST active route, so
+  // it also returns nested stack screens (NewsFeed, ArticleDetail) that a
+  // tabs-only param list would not admit.
+  const navigationRef = useNavigationContainerRef<Record<string, object | undefined>>();
+  // Last screen reported, so a state change that does not move the user (a tab
+  // re-render, a param update) is not counted as another view.
+  const reportedScreen = useRef<string | undefined>(undefined);
+
+  const reportCurrentScreen = () => {
+    const current = navigationRef.getCurrentRoute()?.name;
+    if (!current || current === reportedScreen.current) return;
+    reportedScreen.current = current;
+    trackScreen(current);
+  };
+
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={reportCurrentScreen}
+      onStateChange={reportCurrentScreen}
+    >
       <Tab.Navigator
         screenOptions={{
           headerShown: false,

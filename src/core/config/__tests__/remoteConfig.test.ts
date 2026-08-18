@@ -3,6 +3,10 @@ import {
   getFallbackConfig,
   __resetRemoteConfigCache,
 } from '../remoteConfig';
+import {
+  setObservabilitySink,
+  __resetObservability,
+} from '../../observability/observability';
 
 /**
  * remoteConfig is impure (fetch) but its caching contract is testable: the app
@@ -11,10 +15,14 @@ import {
  */
 
 const mockFetch = jest.fn();
+const sink = { logEvent: jest.fn(), logScreen: jest.fn(), recordError: jest.fn() };
 
 beforeEach(() => {
   __resetRemoteConfigCache();
+  __resetObservability();
   mockFetch.mockReset();
+  sink.logEvent.mockReset();
+  setObservabilitySink(sink);
   globalThis.fetch = mockFetch as unknown as typeof fetch;
 });
 
@@ -38,6 +46,38 @@ describe('loadRemoteConfig', () => {
     mockFetch.mockRejectedValue(new Error('offline'));
 
     await expect(loadRemoteConfig()).resolves.toEqual(getFallbackConfig());
+  });
+
+  it('reports that it fell back, with the failure name', async () => {
+    // Serving baked-in defaults is invisible from the outside: the app boots
+    // fine and plays fine, right up until the stream port rotates.
+    mockFetch.mockRejectedValue(new DOMException('aborted', 'AbortError'));
+
+    await loadRemoteConfig();
+
+    expect(sink.logEvent).toHaveBeenCalledWith('config_fallback_used', {
+      reason: 'AbortError',
+    });
+  });
+
+  it('reports the HTTP status when the config document is missing', async () => {
+    // A 404 means the document moved — the most likely real failure, and the
+    // one worth telling apart from a generic throw.
+    mockFetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+
+    await loadRemoteConfig();
+
+    expect(sink.logEvent).toHaveBeenCalledWith('config_fallback_used', {
+      reason: 'http_404',
+    });
+  });
+
+  it('says nothing when the remote config loads fine', async () => {
+    mockFetch.mockResolvedValue(okResponse({}));
+
+    await loadRemoteConfig();
+
+    expect(sink.logEvent).not.toHaveBeenCalled();
   });
 
   it('shares one request between concurrent callers', async () => {

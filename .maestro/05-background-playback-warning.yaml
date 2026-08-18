@@ -18,9 +18,16 @@ appId: ar.com.lu32.radio
 ---
 - launchApp:
     clearState: true
-# The loading splash plays first (~1.8s), then autoplay reveals the Radio screen
-# with the notice. The exemption is prompted ONLY by tapping "Activar" below —
-# play() no longer auto-fires the system dialog, so no dialog appears on its own.
+# Android 13+: `clearState` revokes POST_NOTIFICATIONS, and initAudio requests it
+# on every cold start, so the system notification dialog opens over the intro.
+# It is not what this flow guards, so dismiss it first. Optional: it does not
+# appear on Android 12 and below, nor once the grant sticks within a run.
+- tapOn:
+    text: 'Permitir'
+    optional: true
+# The animated intro plays first (~4.7s), then autoplay reveals the Radio screen
+# with the notice. The BATTERY exemption is prompted ONLY by tapping "Activar"
+# below — play() no longer auto-fires that dialog.
 - extendedWaitUntil:
     visible: 'La radio puede cortarse en segundo plano'
     timeout: 12000

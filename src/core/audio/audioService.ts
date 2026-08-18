@@ -42,6 +42,12 @@ let lastNetworkState: NetworkStateLike = {
   isConnected: true,
   isInternetReachable: null,
 };
+/**
+ * True once a real connectivity update has landed. The initial snapshot is
+ * fetched without blocking init, so it can resolve *after* the listener has
+ * already reported a change — a stale snapshot must never overwrite live state.
+ */
+let networkObserved = false;
 /** Set when a drop happened offline: reconnect the instant the network returns. */
 let awaitingNetwork = false;
 let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
@@ -103,7 +109,13 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   // controls notification with POST_NOTIFICATIONS granted. Without it the OS
   // kills background audio after ~18s and no shade/lock-screen controls appear.
   // iOS is a no-op here (handled system-side).
-  await requestNotificationPermissionsAsync();
+  //
+  // Deliberately NOT awaited: on a first Android 13+ launch this shows a system
+  // dialog, and blocking here would stall the autoplay that is supposed to
+  // buffer under the splash — the user would sit on the intro until they answer,
+  // and MAX_SPLASH_MS would reveal the app still idle. Playback starts either
+  // way; the notification appears once the grant lands.
+  void requestNotificationPermissionsAsync().catch(() => {});
 
   await setAudioModeAsync({
     playsInSilentMode: true,
@@ -112,15 +124,17 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   });
 
   // Track connectivity so a drop can be told apart from a server-side failure.
-  // Seed synchronously-ish, then keep it live: reconnect the moment WiFi returns
-  // after a screen-off drop, instead of burning timed retries against no route.
+  // The listener is registered FIRST so it always wins: the snapshot below is
+  // not awaited (it would delay playback), so it can land after a real change
+  // has already been reported, and applying it then would rewind the state.
+  netSubscription?.remove();
+  netSubscription = addNetworkStateListener(onNetworkChange);
   getNetworkStateAsync()
     .then((state) => {
+      if (networkObserved) return; // a live update already superseded this
       lastNetworkState = toNetworkStateLike(state);
     })
     .catch(() => {});
-  netSubscription?.remove();
-  netSubscription = addNetworkStateListener(onNetworkChange);
 
   currentStreamUrl = streamUrl;
   player = createAudioPlayer(streamUrl);
@@ -151,6 +165,7 @@ function toNetworkStateLike(state: NetworkState): NetworkStateLike {
  * what makes the stream resume the instant the screen turns back on.
  */
 function onNetworkChange(state: NetworkState): void {
+  networkObserved = true; // from here on, the initial snapshot is stale
   lastNetworkState = toNetworkStateLike(state);
   const online =
     lastNetworkState.isConnected && lastNetworkState.isInternetReachable !== false;
@@ -265,6 +280,7 @@ export function teardownAudio(): void {
   cancelPendingReconnect();
   netSubscription?.remove();
   netSubscription = null;
+  networkObserved = false;
   awaitingNetwork = false;
   player?.clearLockScreenControls();
   player?.remove();

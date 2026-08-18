@@ -29,12 +29,27 @@ jest.mock('expo-audio', () => ({
   requestNotificationPermissionsAsync: jest.fn(async () => ({ granted: true })),
 }));
 
+interface NetSnapshot {
+  isConnected: boolean;
+  isInternetReachable: boolean | null;
+}
+
+/** Lets a test hold the initial network snapshot in flight and drive the listener. */
+const mockNetwork: {
+  seed: Promise<NetSnapshot> | null;
+  listener: ((state: NetSnapshot) => void) | null;
+} = { seed: null, listener: null };
+
 jest.mock('expo-network', () => ({
-  getNetworkStateAsync: jest.fn(async () => ({
-    isConnected: true,
-    isInternetReachable: true,
-  })),
-  addNetworkStateListener: jest.fn(() => ({ remove: jest.fn() })),
+  getNetworkStateAsync: jest.fn(
+    () =>
+      mockNetwork.seed ??
+      Promise.resolve({ isConnected: true, isInternetReachable: true }),
+  ),
+  addNetworkStateListener: jest.fn((cb: (state: NetSnapshot) => void) => {
+    mockNetwork.listener = cb;
+    return { remove: jest.fn() };
+  }),
 }));
 
 const STREAM_URL = 'https://stream.lu32.test/live';
@@ -73,6 +88,8 @@ function emitDrop(): void {
 beforeEach(async () => {
   jest.clearAllMocks();
   jest.useFakeTimers();
+  mockNetwork.seed = null;
+  mockNetwork.listener = null;
   await loadService();
 });
 
@@ -105,6 +122,30 @@ describe('reconnect scheduling', () => {
     jest.advanceTimersByTime(60_000);
 
     expect(mockPlayer.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let a late network snapshot clobber a live listener update', async () => {
+    // Cold launch with no connectivity: the initial getNetworkStateAsync snapshot
+    // is still in flight when WiFi comes up and the listener reports it.
+    let resolveSeed!: (state: NetSnapshot) => void;
+    mockNetwork.seed = new Promise<NetSnapshot>((resolve) => {
+      resolveSeed = resolve;
+    });
+    await loadService();
+
+    mockNetwork.listener?.({ isConnected: true, isInternetReachable: true });
+    resolveSeed({ isConnected: false, isInternetReachable: false }); // stale
+    await Promise.resolve();
+    await Promise.resolve();
+    mockPlayer.replace.mockClear();
+
+    emitDrop();
+    jest.advanceTimersByTime(60_000);
+
+    // The listener is the fresher source, so the drop is online → timed backoff.
+    // If the stale snapshot won, the service parks on await-network and, with no
+    // further connectivity *change* to fire the listener, never reconnects.
+    expect(mockPlayer.replace).toHaveBeenCalled();
   });
 
   it('cancels a pending reconnect on teardown', () => {

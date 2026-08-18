@@ -45,6 +45,13 @@ let lastNetworkState: NetworkStateLike = {
 /** Set when a drop happened offline: reconnect the instant the network returns. */
 let awaitingNetwork = false;
 let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
+/**
+ * Handle of the armed backoff reconnect. Kept so it can be cancelled: a manual
+ * retry, a play from the error state or a teardown all supersede it, and a
+ * stale timer firing afterwards would reload the source and cut audio that is
+ * already playing again.
+ */
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Fallback now-playing used to activate lock-screen controls the moment audio
@@ -155,11 +162,20 @@ function onNetworkChange(state: NetworkState): void {
 }
 
 export function play(): void {
+  const state = usePlayerStore.getState().state;
   // Live sync: resuming a paused live stream would play a stale, behind-air
-  // buffer, so reload the source to jump back to the live edge. A fresh start is
-  // already at the edge, so only reload when resuming from an explicit pause.
-  if (usePlayerStore.getState().state === 'paused' && player && currentStreamUrl) {
+  // buffer, and a stream that errored has no usable source left, so both need a
+  // reload to jump back to the live edge. A fresh start is already at the edge.
+  if ((state === 'paused' || state === 'error') && player && currentStreamUrl) {
     player.replace(currentStreamUrl);
+  }
+  // Playing out of `error` IS a manual retry (the mini-player renders a ▶ there),
+  // so it takes over the reconnect budget and disarms any armed backoff, which
+  // would otherwise fire later and reload the source under a recovered stream.
+  if (state === 'error') {
+    cancelPendingReconnect();
+    reconnectAttempt = 0;
+    awaitingNetwork = false;
   }
   player?.play();
   usePlayerStore.getState().applyEvent('PLAY');
@@ -183,8 +199,16 @@ export function toggle(): void {
   else pause();
 }
 
+/** Disarm the pending backoff reconnect, if any. Safe to call unconditionally. */
+function cancelPendingReconnect(): void {
+  if (reconnectTimer === null) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+}
+
 /** Low-level reconnect: reload the live source and play. Does NOT reset backoff. */
 function reconnect(): void {
+  cancelPendingReconnect();
   usePlayerStore.getState().applyEvent('RETRY');
   if (player && currentStreamUrl) {
     player.replace(currentStreamUrl);
@@ -198,6 +222,12 @@ function reconnect(): void {
  * give up once online retries are exhausted (user retries manually from the UI).
  */
 function handleStreamDrop(): void {
+  // `error` stays set on the engine status until the source is replaced, so the
+  // listener re-reports the same drop on every tick. Without this guard each
+  // tick would arm its own timer and spend an attempt, stacking reconnects and
+  // burning the budget to `give-up` in seconds.
+  if (reconnectTimer !== null || awaitingNetwork) return;
+
   const action = reconnectStrategy(reconnectAttempt, lastNetworkState);
   switch (action.kind) {
     case 'await-network':
@@ -205,7 +235,10 @@ function handleStreamDrop(): void {
       return;
     case 'backoff':
       reconnectAttempt += 1;
-      setTimeout(reconnect, action.delayMs);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        reconnect();
+      }, action.delayMs);
       return;
     case 'give-up':
       return; // stays in error; user retries manually
@@ -216,7 +249,7 @@ function handleStreamDrop(): void {
 export function retry(): void {
   reconnectAttempt = 0;
   awaitingNetwork = false;
-  reconnect();
+  reconnect(); // disarms the pending backoff before reloading
 }
 
 /** Update now-playing across the store and the lock screen. */
@@ -227,6 +260,9 @@ export function setNowPlaying(np: NowPlaying): void {
 
 /** Free native resources, stop listening for connectivity, clear controls. */
 export function teardownAudio(): void {
+  // Before releasing the player: a timer surviving teardown would push RETRY
+  // into the store with no engine behind it, spinning the UI forever.
+  cancelPendingReconnect();
   netSubscription?.remove();
   netSubscription = null;
   awaitingNetwork = false;

@@ -25,7 +25,11 @@ export function playerReducer(state: PlayerState, event: PlayerEvent): PlayerSta
     case 'ERROR':
       return 'error';
     case 'PLAY':
-      return state === 'error' ? 'error' : 'buffering';
+      // Including `error`: PLAY is an explicit user intent, and the mini-player
+      // offers a ▶ in the error state (toggleIntent('error') === 'play'), so
+      // swallowing it here would leave that button permanently dead. The audio
+      // service reloads the source before it emits PLAY from `error`.
+      return 'buffering';
     case 'RETRY':
       return 'buffering';
     case 'BUFFERING':

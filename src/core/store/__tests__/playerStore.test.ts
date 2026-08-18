@@ -35,6 +35,12 @@ describe('playerReducer (pure state machine)', () => {
     expect(playerReducer('error', 'RETRY')).toBe('buffering');
   });
 
+  it('recovers on an explicit play: error + PLAY → buffering', () => {
+    // toggleIntent('error') is 'play', so the mini-player renders a ▶ button in
+    // the error state. Swallowing PLAY here leaves that button permanently dead.
+    expect(playerReducer('error', 'PLAY')).toBe('buffering');
+  });
+
   it('ignores nonsensical transitions: idle + PAUSE stays idle', () => {
     expect(playerReducer('idle', 'PAUSE')).toBe('idle');
   });

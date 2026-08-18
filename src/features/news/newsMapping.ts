@@ -42,7 +42,10 @@ export interface NewsItem {
   title: string;
   summary: string;
   kicker?: string;
+  /** Full-resolution image, for the article detail hero. */
   imageUrl?: string;
+  /** Small variant, for the feed card thumb — see `pickThumbUrl`. */
+  thumbUrl?: string;
   publishedAt: string;
   webUrl?: string;
 }
@@ -82,14 +85,35 @@ export function htmlToParagraphs(html?: string): string[] {
 }
 
 /**
- * Picks the highest-resolution file from a photo asset for a crisp feed card,
- * ignoring the unreliable top-level `thumbnailUrl`. Returns undefined when the
- * article has no usable image.
+ * Picks the highest-resolution file from a photo asset for the full-bleed
+ * article hero, ignoring the unreliable top-level `thumbnailUrl`. Returns
+ * undefined when the article has no usable image.
  */
 export function pickImageUrl(asset?: TadevelPhotoAsset | null): string | undefined {
   if (!asset?.files?.length) return undefined;
   const best = asset.files.reduce((a, b) => ((b.width ?? 0) > (a.width ?? 0) ? b : a));
   return best.url;
+}
+
+/**
+ * Target width for feed thumbs: the card thumb is 72pt, so this covers a 3x
+ * screen with headroom and still avoids pulling the full-resolution original.
+ */
+const THUMB_TARGET_WIDTH = 320;
+
+/**
+ * Picks the smallest file that still covers the feed thumb, falling back to the
+ * largest when the asset has nothing big enough. Feeding the hero-sized image to
+ * a 72pt thumb downloads megabytes per card over mobile data for no visible gain.
+ */
+export function pickThumbUrl(
+  asset?: TadevelPhotoAsset | null,
+  targetWidth: number = THUMB_TARGET_WIDTH,
+): string | undefined {
+  if (!asset?.files?.length) return undefined;
+  const bySize = [...asset.files].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
+  const adequate = bySize.find((file) => (file.width ?? 0) >= targetWidth);
+  return (adequate ?? bySize[bySize.length - 1]).url;
 }
 
 export function mapArticle(raw: TadevelArticle): NewsItem {
@@ -99,6 +123,7 @@ export function mapArticle(raw: TadevelArticle): NewsItem {
     summary: raw.deck ?? '',
     kicker: raw.kicker,
     imageUrl: pickImageUrl(raw.photoAsset),
+    thumbUrl: pickThumbUrl(raw.photoAsset),
     publishedAt: raw.date,
     webUrl: raw.url,
   };

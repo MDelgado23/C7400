@@ -27,8 +27,8 @@ import {
  * ConexionIntro — the Conexion7400 launch intro, ported to React Native from
  * the Claude Design reference (`Conexion Intro.dc.html`).
  *
- * DROP-IN for SplashScreen: same `onFinish` contract, so App.tsx keeps holding
- * the reveal until the animation is done AND the stream is playing.
+ * Calls `onFinish` when the animation completes, so App.tsx keeps holding the
+ * reveal until the animation is done AND the stream is playing.
  *
  * All motion is driven by a single Reanimated `clock` (seconds, 0 → TOTAL_DUR)
  * on the UI thread; every layer reads it through a worklet and derives its pose

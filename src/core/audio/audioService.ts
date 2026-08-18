@@ -42,6 +42,19 @@ let lastNetworkState: NetworkStateLike = {
   isConnected: true,
   isInternetReachable: null,
 };
+/**
+ * True once a real connectivity update has landed. The initial snapshot is
+ * fetched without blocking init, so it can resolve *after* the listener has
+ * already reported a change — a stale snapshot must never overwrite live state.
+ */
+let networkObserved = false;
+/**
+ * Bumped by every initAudio and every teardownAudio. Work started by one init
+ * carries its generation and drops out if it no longer matches — an init can be
+ * suspended on an await when the app unmounts (or re-boots), and resuming into
+ * a superseded world resurrects a player and a subscription nobody owns.
+ */
+let initGeneration = 0;
 /** Set when a drop happened offline: reconnect the instant the network returns. */
 let awaitingNetwork = false;
 let netSubscription: ReturnType<typeof addNetworkStateListener> | null = null;
@@ -97,31 +110,44 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   // Station badge for the lock-screen / notification artwork. Validated here so
   // a bad value can never reach setActiveForLockScreen; undefined just means the
   // notification has no large artwork (Android still shows the app icon).
+  const generation = ++initGeneration;
+  networkObserved = false; // this init's snapshot is the fresh one again
   stationLogoUri = validArtworkUrl(logoUrl);
 
   // Android 13+: the media-playback foreground service can only post its
   // controls notification with POST_NOTIFICATIONS granted. Without it the OS
   // kills background audio after ~18s and no shade/lock-screen controls appear.
   // iOS is a no-op here (handled system-side).
-  await requestNotificationPermissionsAsync();
+  //
+  // Deliberately NOT awaited: on a first Android 13+ launch this shows a system
+  // dialog, and blocking here would stall the autoplay that is supposed to
+  // buffer under the splash — the user would sit on the intro until they answer,
+  // and MAX_SPLASH_MS would reveal the app still idle. The grant is picked up
+  // below instead, once it lands.
+  const permission = requestNotificationPermissionsAsync().catch(() => undefined);
 
   await setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: true,
     interruptionMode: 'doNotMix',
   });
+  if (generation !== initGeneration) return; // torn down (or re-inited) mid-flight
 
   // Track connectivity so a drop can be told apart from a server-side failure.
-  // Seed synchronously-ish, then keep it live: reconnect the moment WiFi returns
-  // after a screen-off drop, instead of burning timed retries against no route.
+  // The listener is registered FIRST so it always wins: the snapshot below is
+  // not awaited (it would delay playback), so it can land after a real change
+  // has already been reported, and applying it then would rewind the state.
+  netSubscription?.remove();
+  netSubscription = addNetworkStateListener(onNetworkChange);
   getNetworkStateAsync()
     .then((state) => {
+      if (generation !== initGeneration || networkObserved) return;
       lastNetworkState = toNetworkStateLike(state);
     })
     .catch(() => {});
-  netSubscription?.remove();
-  netSubscription = addNetworkStateListener(onNetworkChange);
 
+  // Never overwrite a live player: two natives on the same stream play twice.
+  player?.remove();
   currentStreamUrl = streamUrl;
   player = createAudioPlayer(streamUrl);
   player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
@@ -134,6 +160,19 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
     } else if (event === 'ERROR') {
       handleStreamDrop();
     }
+  });
+
+  // Autoplay starts while the permission dialog may still be open, and the
+  // foreground service that sustains background audio can only post its
+  // notification once POST_NOTIFICATIONS is granted. Re-activate the session
+  // when the grant lands so the service is armed for a playback that already
+  // began — nothing else would do it, since pushLockScreen is only reachable
+  // from play(). Chained after the player exists so it always has one.
+  void permission.then(() => {
+    if (generation !== initGeneration) return;
+    // Not started yet: play() will arm the session itself.
+    if (usePlayerStore.getState().state === 'idle') return;
+    pushLockScreen(usePlayerStore.getState().program ?? DEFAULT_NOW_PLAYING);
   });
 }
 
@@ -151,6 +190,7 @@ function toNetworkStateLike(state: NetworkState): NetworkStateLike {
  * what makes the stream resume the instant the screen turns back on.
  */
 function onNetworkChange(state: NetworkState): void {
+  networkObserved = true; // from here on, the initial snapshot is stale
   lastNetworkState = toNetworkStateLike(state);
   const online =
     lastNetworkState.isConnected && lastNetworkState.isInternetReachable !== false;
@@ -260,11 +300,14 @@ export function setNowPlaying(np: NowPlaying): void {
 
 /** Free native resources, stop listening for connectivity, clear controls. */
 export function teardownAudio(): void {
+  // Invalidate any init still in flight so it cannot resurrect what we release.
+  initGeneration += 1;
   // Before releasing the player: a timer surviving teardown would push RETRY
   // into the store with no engine behind it, spinning the UI forever.
   cancelPendingReconnect();
   netSubscription?.remove();
   netSubscription = null;
+  networkObserved = false;
   awaitingNetwork = false;
   player?.clearLockScreenControls();
   player?.remove();

@@ -81,8 +81,12 @@ export function NewsFeedView({ status, items, onRetry, onSelectArticle }: NewsFe
             onPress={() => onSelectArticle(item)}
             style={styles.card}
           >
-            {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+            {/* Thumb-sized variant, not the hero: this box is 72pt. */}
+            {item.thumbUrl ?? item.imageUrl ? (
+              <Image
+                source={{ uri: item.thumbUrl ?? item.imageUrl }}
+                style={styles.thumb}
+              />
             ) : (
               <View style={styles.thumb} />
             )}

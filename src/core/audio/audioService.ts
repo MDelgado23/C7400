@@ -175,14 +175,27 @@ export async function initAudio(streamUrl: string, logoUrl?: string): Promise<vo
   player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
     const event = mapStatusToEvent(status);
     if (!event) return;
+    const previous = usePlayerStore.getState().state;
     usePlayerStore.getState().applyEvent(event);
     if (event === 'PLAYING') {
-      // Only for a start we actually asked for. A rebuffer recovering, or an
-      // automatic reconnect, is the SAME session continuing — counting those
-      // would inflate the denominator every failure rate is measured against.
-      if (pendingStart) {
+      // Two ways a session legitimately starts, and it takes both.
+      //
+      // `pendingStart` is a start we asked for through play() or retry(). On its
+      // own it MISSES the lock-screen and notification controls: expo-audio
+      // serves those natively against the engine, so our play() never runs and
+      // nothing arms the flag. Verified on a device — the audio resumed and
+      // nothing was reported. On a radio that is the most common resume there is.
+      //
+      // Leaving `paused` covers exactly those, and cannot let a rebuffer or an
+      // automatic reconnect back in: a rebuffer goes playing → buffering →
+      // playing and a reconnect error → buffering → playing. Neither ever
+      // passes through `paused`, which is what makes this safe to trust.
+      const resumedFromPause = previous === 'paused';
+      if (pendingStart || resumedFromPause) {
         pendingStart = false;
-        trackEvent(EVENTS.PLAYBACK_STARTED, { resumed: pendingStartResumed });
+        trackEvent(EVENTS.PLAYBACK_STARTED, {
+          resumed: pendingStartResumed || resumedFromPause,
+        });
       }
       resetReconnectBudget(); // healthy stream
     } else if (event === 'ERROR') {

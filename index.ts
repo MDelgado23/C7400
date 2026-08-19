@@ -5,6 +5,8 @@ import { setObservabilitySink } from './src/core/observability/observability';
 import { firebaseSink } from './src/core/observability/firebaseSink';
 import { setAuthProvider, startAnonymousSession } from './src/core/auth/authService';
 import { firebaseAuthProvider } from './src/core/auth/firebaseAuthAdapter';
+import { setFavoritesProvider } from './src/core/favorites/favoritesService';
+import { firestoreFavoritesProvider } from './src/core/favorites/firestoreFavoritesAdapter';
 
 // Registered HERE, at module scope, and deliberately not from a React effect.
 // `config_fallback_used` is reported from inside `loadRemoteConfig()`, which is
@@ -23,6 +25,11 @@ setObservabilitySink(firebaseSink);
 // the session saved on the device. Registering from an effect would leave the
 // first render of every screen believing nobody is signed in.
 setAuthProvider(firebaseAuthProvider);
+
+// Registered AFTER auth, and that order is load-bearing: the favourites port
+// follows the signed-in user, so it has to be listening before the session is
+// restored or it would miss the report that tells it whose list to open.
+setFavoritesProvider(firestoreFavoritesProvider);
 
 // Give the device an identity so anything it saves outlives the session.
 //

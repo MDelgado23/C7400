@@ -3,6 +3,8 @@ import { registerRootComponent } from 'expo';
 import App from './App';
 import { setObservabilitySink } from './src/core/observability/observability';
 import { firebaseSink } from './src/core/observability/firebaseSink';
+import { setAuthProvider, startAnonymousSession } from './src/core/auth/authService';
+import { firebaseAuthProvider } from './src/core/auth/firebaseAuthAdapter';
 
 // Registered HERE, at module scope, and deliberately not from a React effect.
 // `config_fallback_used` is reported from inside `loadRemoteConfig()`, which is
@@ -15,6 +17,20 @@ import { firebaseSink } from './src/core/observability/firebaseSink';
 // This is the single line that binds the app to a provider. Everything else
 // goes through the port.
 setObservabilitySink(firebaseSink);
+
+// Same reasoning, one step earlier: the auth listener has to be attached before
+// anything can ask who the user is, and it is the listener firing that restores
+// the session saved on the device. Registering from an effect would leave the
+// first render of every screen believing nobody is signed in.
+setAuthProvider(firebaseAuthProvider);
+
+// Give the device an identity so anything it saves outlives the session.
+//
+// Deliberately NOT awaited and deliberately unable to reject: this is a radio,
+// and it has to play whether or not there is an account behind it. Internally it
+// waits for the restored session before deciding, so a cold boot cannot mint a
+// second uid over an account that already exists.
+void startAnonymousSession();
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,

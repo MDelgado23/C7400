@@ -28,6 +28,14 @@ export const EVENTS = {
   CONFIG_FALLBACK_USED: 'config_fallback_used',
   /** A news article was opened from the feed. */
   ARTICLE_OPENED: 'article_opened',
+  /**
+   * The boot anonymous sign-in failed. Nothing threw and no screen showed an
+   * error — the device just never got an identity, so every save silently does
+   * nothing. Exactly the invisible failure this catalog exists for.
+   */
+  AUTH_SESSION_FAILED: 'auth_session_failed',
+  /** An anonymous session became a real account. The conversion metric. */
+  AUTH_ACCOUNT_UPGRADED: 'auth_account_upgraded',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

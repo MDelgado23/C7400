@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Security rules for LU32 Radio.
+//
+// DEPLOY THESE BEFORE THE FEATURE SHIPS. A Firestore database created in "test
+// mode" is world-readable and world-writable until its expiry date, at which
+// point it flips to denying everything. Neither state is the one we want, and
+// the first one means anyone can download every user's saved articles.
+//
+// Deploy with:  npx firebase-tools deploy --only firestore:rules --project c7400-cd836
+// or paste into: Firebase console -> Firestore Database -> Rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A user's saved articles. The uid is IN THE PATH, which is what keeps this
+    // to a single comparison: a request can only ever touch the subtree named
+    // after the account making it.
+    //
+    // `request.auth != null` covers anonymous sessions too, deliberately —
+    // anonymous users have a real uid and their favourites are as much theirs
+    // as anyone's. That is the whole premise of anonymous-first.
+    match /users/{userId}/favorites/{articleId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && isWellFormedArticle();
+    }
+
+    // Everything else is denied. Rules do not cascade: a path with no `match`
+    // has no access, which is exactly what we want for anything added later
+    // before someone has thought about who should see it.
+  }
+}
+
+// A stored article has to look like one.
+//
+// Not a defence against a hostile user — a client is authenticated as itself
+// and can only ever spoil its own list. It is a defence against a BUG in our
+// app writing malformed rows that then break the list for the person who owns
+// it, and against a runaway write burning the daily quota for everyone.
+function isWellFormedArticle() {
+  let article = request.resource.data;
+  return article.id is string
+    && article.title is string
+    && article.savedAt is number
+    && article.paragraphs is list
+    // 1 MiB is Firestore's hard document limit; staying well under it means a
+    // malformed write is rejected here instead of failing mid-sync.
+    && request.resource.size() < 500000;
+}

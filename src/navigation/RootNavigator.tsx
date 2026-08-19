@@ -8,6 +8,9 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { Ionicons } from '@expo/vector-icons';
 import { PlayerScreen } from '../features/radio/PlayerScreen';
 import { NewsStack } from './NewsStack';
+import { AccountStack } from './AccountStack';
+import { accountTabLabel } from '../features/account/accountMenu';
+import { useAuthUser } from '../features/auth/useAuthUser';
 import { MiniPlayer } from '../ui/organisms/MiniPlayer';
 import { shouldShowMiniPlayer, FULL_PLAYER_ROUTE } from './miniPlayerVisibility';
 import { colors } from '../ui/theme';
@@ -43,6 +46,10 @@ export function RootNavigator() {
   // Last screen reported, so a state change that does not move the user (a tab
   // re-render, a param update) is not counted as another view.
   const reportedScreen = useRef<string | undefined>(undefined);
+  // Drives the third tab's label and icon: an anonymous user is invited to
+  // "Entrar", a registered one is shown their "Cuenta".
+  const user = useAuthUser();
+  const isSignedIn = user !== null && !user.isAnonymous;
 
   const reportCurrentScreen = () => {
     const current = navigationRef.getCurrentRoute()?.name;
@@ -97,6 +104,36 @@ export function RootNavigator() {
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
                 name={focused ? 'newspaper' : 'newspaper-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Cuenta"
+          component={AccountStack}
+          options={{
+            // The ROUTE name stays "Cuenta" while the LABEL changes: screen
+            // reports and deep links should not shift under us just because
+            // somebody signed in.
+            tabBarLabel: accountTabLabel(user),
+            // Leaving the tab returns it to the menu. Settings are somewhere you
+            // go to do ONE thing, and coming back to a half-filled password form
+            // from three tabs away is disorienting — worse, it leaves a typed
+            // password sitting on a screen nobody is looking at.
+            popToTopOnBlur: true,
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={
+                  isSignedIn
+                    ? focused
+                      ? 'person'
+                      : 'person-outline'
+                    : focused
+                      ? 'log-in'
+                      : 'log-in-outline'
+                }
                 size={size}
                 color={color}
               />

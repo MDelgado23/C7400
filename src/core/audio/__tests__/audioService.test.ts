@@ -329,6 +329,22 @@ describe('observability', () => {
     expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'true' });
   });
 
+  it('counts a resume driven from the lock screen, which never calls play()', () => {
+    // The notification / lock-screen controls are served natively by
+    // expo-audio's media session and drive the engine directly — our play()
+    // never runs, so `pendingStart` is never armed. Verified on a Moto G35:
+    // the audio came back and NOTHING was reported. On a radio that is likely
+    // the most common resume there is, so losing it guts the denominator.
+    audio.play();
+    emitStatus({ playing: true, timeControlStatus: 'playing' });
+    emitStatus({ timeControlStatus: 'paused' }); // paused from the lock screen
+    sink.logEvent.mockClear();
+
+    emitStatus({ playing: true, timeControlStatus: 'playing' }); // resumed there too
+
+    expect(sink.logEvent).toHaveBeenCalledWith('playback_started', { resumed: 'true' });
+  });
+
   it('marks a fresh start as not resumed', () => {
     audio.play();
     emitStatus({ playing: true, timeControlStatus: 'playing' });

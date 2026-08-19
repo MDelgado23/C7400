@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "991731664968",
+    "project_id": "c7400-cd836",
+    "storage_bucket": "c7400-cd836.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:991731664968:android:af51167c4213282b21f07d",
+        "android_client_info": {
+          "package_name": "ar.com.lu32.radio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7bgCsFWQ9QMUIugtGQrkKM8XhkMty28o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

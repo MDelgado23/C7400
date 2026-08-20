@@ -78,7 +78,14 @@ const styles = StyleSheet.create({
   bar: { flexGrow: 0, flexShrink: 0 },
   barContent: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    /*
+     * The gap BELOW the chips is this bar's bottom padding PLUS the list's own
+     * top padding, so matching only the bottom value here would leave the row
+     * pinned to the header with twice as much air under it. The top padding is
+     * their sum instead, and the chips sit centred between the two.
+     */
+    paddingTop: spacing.sm + spacing.md,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
     // Belt and braces: even if something above ever hands this bar more height,
     // the chips stay their own size instead of stretching to fill it.

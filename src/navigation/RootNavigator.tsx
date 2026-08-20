@@ -8,6 +8,7 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { Ionicons } from '@expo/vector-icons';
 import { PlayerScreen } from '../features/radio/PlayerScreen';
 import { NewsStack } from './NewsStack';
+import { SponsorsScreen } from '../features/sponsors/SponsorsScreen';
 import { AccountStack } from './AccountStack';
 import { accountTabLabel } from '../features/account/accountMenu';
 import { useAuthUser } from '../features/auth/useAuthUser';
@@ -104,6 +105,19 @@ export function RootNavigator() {
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
                 name={focused ? 'newspaper' : 'newspaper-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Auspiciantes"
+          component={SponsorsScreen}
+          options={{
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'heart' : 'heart-outline'}
                 size={size}
                 color={color}
               />

@@ -36,6 +36,20 @@ export const EVENTS = {
   AUTH_SESSION_FAILED: 'auth_session_failed',
   /** An anonymous session became a real account. The conversion metric. */
   AUTH_ACCOUNT_UPGRADED: 'auth_account_upgraded',
+  /** A sponsor's sheet was opened from the grid. The interest denominator. */
+  SPONSOR_OPENED: 'sponsor_opened',
+  /**
+   * A listener tapped through to one of a sponsor's channels.
+   *
+   * The one event here that is not about a silent failure, and it earns its
+   * place for a different reason: it is the number the radio shows a local
+   * business at renewal time. Without it the app sends them traffic nobody can
+   * prove, which is worth the same as sending them none.
+   *
+   * Cardinality stays bounded because the sponsor ids are a small set the radio
+   * writes by hand.
+   */
+  SPONSOR_LINK_TAPPED: 'sponsor_link_tapped',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

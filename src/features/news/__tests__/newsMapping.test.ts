@@ -8,6 +8,8 @@ import {
   type TadevelArticle,
 } from '../newsMapping';
 
+const SITE = 'https://lu32.com.ar';
+
 const photoAsset = {
   id: 'asset1',
   files: [
@@ -69,7 +71,7 @@ describe('pickThumbUrl', () => {
 
 describe('mapArticle', () => {
   it('maps the Tadevel article onto a NewsItem', () => {
-    const item = mapArticle(article());
+    const item = mapArticle(article(), SITE);
     expect(item.id).toBe('6a51');
     expect(item.title).toBe('Fecha doble para la Fórmula');
     expect(item.summary).toBe('Este fin de semana en Azul');
@@ -79,28 +81,28 @@ describe('mapArticle', () => {
   });
 
   it('uses photoAsset for the image, never the broken thumbnailUrl', () => {
-    expect(mapArticle(article()).imageUrl).toBe('https://cdn/t720.jpeg');
+    expect(mapArticle(article(), SITE).imageUrl).toBe('https://cdn/t720.jpeg');
   });
 
   it('carries a separate thumb URL so the feed does not fetch the hero', () => {
-    expect(mapArticle(article()).thumbUrl).toBe('https://cdn/t360.jpeg');
+    expect(mapArticle(article(), SITE).thumbUrl).toBe('https://cdn/t360.jpeg');
   });
 
   it('falls back to an empty summary when the deck is missing', () => {
-    expect(mapArticle(article({ deck: undefined })).summary).toBe('');
+    expect(mapArticle(article({ deck: undefined }), SITE).summary).toBe('');
   });
 });
 
 describe('parseArticleList', () => {
   it('maps every article in the response payload', () => {
-    const items = parseArticleList({ data: [article({ id: 'a' }), article({ id: 'b' })] });
+    const items = parseArticleList({ data: [article({ id: 'a' }), article({ id: 'b' })] }, SITE);
     expect(items).toHaveLength(2);
     expect(items.map((i) => i.id)).toEqual(['a', 'b']);
   });
 
   it('returns an empty list when the payload has no data', () => {
-    expect(parseArticleList({})).toEqual([]);
-    expect(parseArticleList({ data: [] })).toEqual([]);
+    expect(parseArticleList({}, SITE)).toEqual([]);
+    expect(parseArticleList({ data: [] }, SITE)).toEqual([]);
   });
 });
 
@@ -133,13 +135,13 @@ describe('htmlToParagraphs', () => {
 
 describe('mapArticleDetail', () => {
   it('extends the news item with body paragraphs from bodyHtml', () => {
-    const detail = mapArticleDetail(article({ bodyHtml: '<p>Uno</p><p>Dos</p>' }));
+    const detail = mapArticleDetail(article({ bodyHtml: '<p>Uno</p><p>Dos</p>' }), SITE);
     expect(detail.title).toBe('Fecha doble para la Fórmula');
     expect(detail.imageUrl).toBe('https://cdn/t720.jpeg');
     expect(detail.paragraphs).toEqual(['Uno', 'Dos']);
   });
 
   it('yields no paragraphs when bodyHtml is absent', () => {
-    expect(mapArticleDetail(article()).paragraphs).toEqual([]);
+    expect(mapArticleDetail(article(), SITE).paragraphs).toEqual([]);
   });
 });

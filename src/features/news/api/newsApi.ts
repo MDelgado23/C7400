@@ -26,21 +26,21 @@ import {
  *     this side — see `newsWindow`.
  */
 export async function fetchNews(skip = 0): Promise<NewsItem[]> {
-  const { newsApiBase } = await loadRemoteConfig();
+  const { newsApiBase, siteBase } = await loadRemoteConfig();
   // Omitted for the first page rather than sent as zero: the shorter URL is
   // what the CDN already has cached for everybody else opening the app.
   const query = skip > 0 ? `?skip=${skip}` : '';
   const res = await fetch(`${newsApiBase}/article${query}`);
   if (!res.ok) throw new Error(`news request failed: HTTP ${res.status}`);
   const payload = (await res.json()) as TadevelArticleResponse;
-  return parseArticleList(payload);
+  return parseArticleList(payload, siteBase);
 }
 
 /** Fetches a single article (with body) from Tadevel's detail endpoint. */
 export async function fetchArticle(id: string): Promise<ArticleDetail> {
-  const { newsApiBase } = await loadRemoteConfig();
+  const { newsApiBase, siteBase } = await loadRemoteConfig();
   const res = await fetch(`${newsApiBase}/article/${id}`);
   if (!res.ok) throw new Error(`article request failed: HTTP ${res.status}`);
   const raw = (await res.json()) as TadevelArticle;
-  return mapArticleDetail(raw);
+  return mapArticleDetail(raw, siteBase);
 }

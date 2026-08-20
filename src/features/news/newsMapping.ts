@@ -1,3 +1,5 @@
+import { absoluteArticleUrl } from './articleUrl';
+
 /**
  * Pure mapping between Tadevel's article API and our app's NewsItem model.
  * No fetch here — kept pure so the transforms (especially image selection,
@@ -116,7 +118,12 @@ export function pickThumbUrl(
   return (adequate ?? bySize[bySize.length - 1]).url;
 }
 
-export function mapArticle(raw: TadevelArticle): NewsItem {
+/**
+ * `siteBase` is threaded in rather than read here so this stays pure. It is
+ * what turns the PATH the API calls `url` into a real address — see
+ * `absoluteArticleUrl` for why that matters and what it refuses.
+ */
+export function mapArticle(raw: TadevelArticle, siteBase: string): NewsItem {
   return {
     id: raw.id,
     title: raw.title,
@@ -125,17 +132,17 @@ export function mapArticle(raw: TadevelArticle): NewsItem {
     imageUrl: pickImageUrl(raw.photoAsset),
     thumbUrl: pickThumbUrl(raw.photoAsset),
     publishedAt: raw.date,
-    webUrl: raw.url,
+    webUrl: absoluteArticleUrl(raw.url, siteBase),
   };
 }
 
-export function parseArticleList(res: TadevelArticleResponse): NewsItem[] {
-  return (res.data ?? []).map(mapArticle);
+export function parseArticleList(res: TadevelArticleResponse, siteBase: string): NewsItem[] {
+  return (res.data ?? []).map((raw) => mapArticle(raw, siteBase));
 }
 
-export function mapArticleDetail(raw: TadevelArticle): ArticleDetail {
+export function mapArticleDetail(raw: TadevelArticle, siteBase: string): ArticleDetail {
   return {
-    ...mapArticle(raw),
+    ...mapArticle(raw, siteBase),
     paragraphs: htmlToParagraphs(raw.bodyHtml),
   };
 }

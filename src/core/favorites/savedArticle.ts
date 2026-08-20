@@ -136,7 +136,14 @@ export function fromStoredData(raw: unknown): SavedArticle | null {
   putOptionalString(recovered, 'kicker', data.kicker);
   putOptionalString(recovered, 'imageUrl', data.imageUrl);
   putOptionalString(recovered, 'thumbUrl', data.thumbUrl);
-  putOptionalString(recovered, 'webUrl', data.webUrl);
+  // Only an absolute https address survives. Notes saved before the mapper
+  // learned to build one carry the PATH the API sends —
+  // `/locales/aoma-inicia-...` — under a field named `webUrl`, and those rows
+  // are already in Firestore. Recovering them would keep handing a link that
+  // opens nothing; dropping them means the next save writes the real one.
+  if (typeof data.webUrl === 'string' && data.webUrl.startsWith('https://')) {
+    recovered.webUrl = data.webUrl;
+  }
   if (data.truncated === true) recovered.truncated = true;
 
   return recovered as unknown as SavedArticle;

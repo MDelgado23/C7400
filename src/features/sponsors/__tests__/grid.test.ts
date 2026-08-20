@@ -1,9 +1,9 @@
 import {
   GRID_COLUMNS,
   GRID_CONTENT_PADDING,
+  GRID_FALLBACK_ROWS,
   GRID_GAP,
-  GRID_MIN_SLOTS,
-  MIN_LOGO_SIDE,
+  MIN_PLATE_HEIGHT,
   gridMetrics,
   gridSlots,
 } from '../grid';
@@ -18,157 +18,173 @@ function sponsorsOf(count: number): Sponsor[] {
 }
 
 describe('gridSlots', () => {
-  // The grid is a 3x3 that is always WHOLE: a radio with five sponsors shows
-  // five logos and four quiet holes, not a ragged half-screen.
-  it('pads a short list up to nine slots', () => {
-    const slots = gridSlots(sponsorsOf(5));
+  // The screen is always FULL: a radio with five sponsors shows five logos and
+  // the rest as quiet holes, not a section that ran out halfway down.
+  it('pads a short list up to the slots asked for', () => {
+    const slots = gridSlots(sponsorsOf(5), 15);
 
-    expect(slots).toHaveLength(9);
+    expect(slots).toHaveLength(15);
     expect(slots.slice(0, 5).map((slot) => slot.kind)).toEqual(Array(5).fill('sponsor'));
-    expect(slots.slice(5).map((slot) => slot.kind)).toEqual(Array(4).fill('empty'));
+    expect(slots.slice(5).map((slot) => slot.kind)).toEqual(Array(10).fill('empty'));
   });
 
   it('keeps the sponsors in the order they were given', () => {
-    const slots = gridSlots(sponsorsOf(4));
+    const ids = gridSlots(sponsorsOf(4), 9)
+      .filter((slot) => slot.kind === 'sponsor')
+      .map((slot) => (slot.kind === 'sponsor' ? slot.sponsor.id : ''));
 
-    expect(
-      slots.filter((slot) => slot.kind === 'sponsor').map((slot) => slot.sponsor.id),
-    ).toEqual(['s1', 's2', 's3', 's4']);
+    expect(ids).toEqual(['s1', 's2', 's3', 's4']);
   });
 
-  it.each([1, 2, 5, 8])('pads %i sponsors to nine', (count) => {
-    expect(gridSlots(sponsorsOf(count))).toHaveLength(GRID_MIN_SLOTS);
-  });
+  it('pads nothing when the slots are exactly taken', () => {
+    const slots = gridSlots(sponsorsOf(12), 12);
 
-  it('pads nothing when there are exactly nine', () => {
-    const slots = gridSlots(sponsorsOf(9));
-
-    expect(slots).toHaveLength(9);
+    expect(slots).toHaveLength(12);
     expect(slots.every((slot) => slot.kind === 'sponsor')).toBe(true);
   });
 
-  // Past nine the padding has done its job: those slots are below the fold, so
-  // rounding the last row out with holes would only invent empty space nobody
-  // asked to scroll to.
-  it.each([10, 12, 17])('leaves %i sponsors exactly as they are', (count) => {
-    const slots = gridSlots(sponsorsOf(count));
+  // Past the visible slots the padding has done its job: more holes would sit
+  // below the fold, where they are only empty space to scroll past.
+  it.each([13, 20])('leaves %i sponsors alone when only 12 are visible', (count) => {
+    const slots = gridSlots(sponsorsOf(count), 12);
 
     expect(slots).toHaveLength(count);
     expect(slots.every((slot) => slot.kind === 'sponsor')).toBe(true);
   });
 
-  it('gives every empty slot a key of its own, so React can tell them apart', () => {
-    const keys = gridSlots(sponsorsOf(2))
+  it('gives every hole a key of its own, so React can tell them apart', () => {
+    const keys = gridSlots(sponsorsOf(2), 9)
       .filter((slot) => slot.kind === 'empty')
-      .map((slot) => slot.key);
+      .map((slot) => (slot.kind === 'empty' ? slot.key : ''));
 
     expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it('is three columns wide', () => {
-    expect(GRID_COLUMNS).toBe(3);
-    expect(GRID_MIN_SLOTS).toBe(GRID_COLUMNS * 3);
   });
 });
 
 describe('gridMetrics', () => {
   /**
-   * What onLayout actually reports: the OUTER box, padding included. The Moto
-   * G35 is 432dp across, and the section gets ~776dp of it once the tab bar,
-   * mini-player and heading have taken theirs.
+   * What `onLayout` reports on the Moto G35 the app is tested on: 432dp across,
+   * and 693dp of height left once the heading, mini-player, tab bar and system
+   * bars have taken theirs. Measured off a screenshot, not guessed.
    */
-  const MOTO = { width: 432, height: 776 };
-  /**
-   * A box short enough that the height runs out first — a small screen with the
-   * system font scaled up, or any future chrome that eats into the section.
-   *
-   * Worth stating plainly: on the phones modelled so far the WIDTH is what
-   * binds, by a hair. This clamp is not fixing a bug that was about to ship; it
-   * is what makes "all nine are visible" a guarantee rather than a bet on every
-   * screen being tall enough.
-   */
-  const SHORT = { width: 320, height: 332 };
+  const MOTO = { width: 432, height: 693 };
 
-  it('divides the width into three columns with the gaps taken out', () => {
-    const { tileWidth } = gridMetrics(MOTO);
-
-    // (432 - 2 paddings of 16 - 2 gaps of 8) / 3
-    expect(tileWidth).toBeCloseTo(128, 0);
+  const innerOf = (box: { width: number; height: number }) => ({
+    width: box.width - GRID_CONTENT_PADDING * 2,
+    height: box.height - GRID_CONTENT_PADDING * 2,
   });
 
-  /**
-   * THE ONE THAT WOULD HAVE CAUGHT THE TWO-COLUMN BUG.
-   *
-   * The first version took the box the caller happened to pass and trusted it.
-   * The caller passed what onLayout reports — the scroll view's OWN width —
-   * while the tiles live inside the content padding, so three tiles came out
-   * 16dp too wide between them, wrapped to two per row, and every unit test
-   * still passed because the arithmetic was never wrong: the INPUT was.
-   *
-   * Owning the padding here is what makes this assertion possible at all.
-   */
-  it.each([320, 360, 412, 432, 480])(
-    'fits three tiles and their gaps inside a %idp screen',
-    (width) => {
-      const { tileWidth } = gridMetrics({ width, height: 776 });
-      const row = tileWidth * GRID_COLUMNS + GRID_GAP * (GRID_COLUMNS - 1);
-
-      expect(row).toBeLessThanOrEqual(width - GRID_CONTENT_PADDING * 2 + 0.001);
-    },
-  );
-
-  describe('which constraint binds', () => {
-    // Every roomy phone: three columns is what limits the tile, and the grid
-    // sits in the upper part of the screen with air below it.
-    it('is limited by the width on a tall screen', () => {
-      const { logoSide, tileWidth } = gridMetrics(MOTO);
-
-      expect(logoSide).toBeCloseTo(tileWidth - 16, 0);
+  describe('the columns', () => {
+    it('divides the width into three, with the gaps taken out', () => {
+      // (432 - 2 paddings of 16 - 2 gaps of 8) / 3
+      expect(gridMetrics(MOTO).tileWidth).toBeCloseTo(128, 0);
     });
 
-    // The width would allow a 75dp logo here, but three rows of that do not
-    // fit — and the ninth sponsor would fall below the fold on the one section
-    // whose whole point is that all nine are visible at once.
-    it('is limited by the height on a short screen', () => {
-      const { logoSide, tileWidth } = gridMetrics(SHORT);
+    /**
+     * THE ONE THAT CAUGHT THE TWO-COLUMN BUG.
+     *
+     * The first version trusted the box the caller passed. The caller passed
+     * what onLayout reports — the scroll view's OWN width — while the tiles live
+     * inside the content padding, so three tiles came out 16dp too wide between
+     * them, wrapped to two per row, and every unit test still passed because the
+     * arithmetic was never wrong: the INPUT was.
+     */
+    it.each([320, 360, 412, 432, 480])(
+      'fits three tiles and their gaps inside a %idp screen',
+      (width) => {
+        const { tileWidth } = gridMetrics({ width, height: 693 });
+        const row = tileWidth * GRID_COLUMNS + GRID_GAP * (GRID_COLUMNS - 1);
 
-      expect(logoSide).toBeLessThan(tileWidth - 16);
+        expect(row).toBeLessThanOrEqual(innerOf({ width, height: 0 }).width + 0.001);
+      },
+    );
+  });
+
+  // THE POINT OF THIS MODULE. A fixed 3x3 left a third of this phone empty —
+  // 227dp of the 693 it had — because three is only ever the right number on
+  // the screen it was chosen on.
+  describe('the rows adapt to the screen', () => {
+    it('finds five rows on the phone that fitted three', () => {
+      expect(gridMetrics(MOTO).rows).toBe(5);
     });
 
-    it('fits three rows inside the height it was given', () => {
-      const { logoSide } = gridMetrics(SHORT);
-      const chrome = 16 + 4 + 16; // tile padding + inner gap + label
-      const inner = SHORT.height - GRID_CONTENT_PADDING * 2;
+    it.each([
+      ['a short screen', { width: 432, height: 420 }],
+      ['the test phone', MOTO],
+      ['a long screen', { width: 432, height: 900 }],
+    ])('fills %s exactly, with no strip left over', (_label, box) => {
+      const { rows, tileHeight } = gridMetrics(box);
+      const used = tileHeight * rows + GRID_GAP * (rows - 1);
 
-      expect((logoSide + chrome) * 3 + GRID_GAP * 2).toBeLessThanOrEqual(inner + 1);
+      expect(used).toBeCloseTo(innerOf(box).height, 5);
+    });
+
+    it('asks for more rows as the screen gets longer', () => {
+      const short = gridMetrics({ width: 432, height: 420 }).rows;
+      const long = gridMetrics({ width: 432, height: 900 }).rows;
+
+      expect(long).toBeGreaterThan(short);
+    });
+
+    it('never asks for fewer than one row', () => {
+      expect(gridMetrics({ width: 432, height: 60 }).rows).toBeGreaterThanOrEqual(1);
+    });
+
+    // One extra row among n shrinks a tile by at most n/(n+1), so the tile is
+    // never a fraction of what the width would have allowed.
+    it('keeps the tile close to the square it was designed as', () => {
+      const { tileWidth, tileHeight } = gridMetrics(MOTO);
+
+      expect(tileHeight).toBeGreaterThan(tileWidth * 0.75);
+      expect(tileHeight).toBeLessThanOrEqual(tileWidth + 20 + 0.001);
     });
   });
 
-  describe('degenerate boxes', () => {
-    // The first frame, before onLayout has measured anything.
+  describe('the plate', () => {
+    // It spans the tile's full width and takes the height that is left, so a
+    // wide wordmark uses all of it instead of shrinking into a square.
+    it('is shorter than the tile is wide once the rows are stretched', () => {
+      const { tileWidth, plateHeight } = gridMetrics(MOTO);
+
+      expect(plateHeight).toBeLessThan(tileWidth);
+      expect(plateHeight).toBeGreaterThan(0);
+    });
+
+    it('stops shrinking at a legible floor', () => {
+      expect(gridMetrics({ width: 432, height: 120 }).plateHeight).toBe(MIN_PLATE_HEIGHT);
+    });
+
+    it('grows with the width of the screen', () => {
+      const small = gridMetrics({ width: 320, height: 693 });
+      const large = gridMetrics({ width: 480, height: 693 });
+
+      expect(large.tileWidth).toBeGreaterThan(small.tileWidth);
+    });
+  });
+
+  describe('before anything is measured', () => {
+    // The frame between mount and the first onLayout. Zeroes, so the caller can
+    // draw nothing rather than a size that visibly snaps into place.
     it.each([
       ['unmeasured', { width: 0, height: 0 }],
       ['negative', { width: -100, height: -100 }],
-    ])('never returns a negative size for a %s box', (_label, box) => {
-      const { tileWidth, logoSide } = gridMetrics(box);
+      ['NaN', { width: Number.NaN, height: Number.NaN }],
+    ])('reports nothing to draw for a %s box', (_label, box) => {
+      const { tileWidth, tileHeight, plateHeight } = gridMetrics(box);
 
-      expect(tileWidth).toBeGreaterThanOrEqual(0);
-      expect(logoSide).toBeGreaterThanOrEqual(0);
+      expect(tileWidth).toBe(0);
+      expect(tileHeight).toBe(0);
+      expect(plateHeight).toBe(0);
     });
 
-    // A logo shrunk past legibility helps nobody: better to overflow the box
-    // and let the section scroll than to draw nine unreadable stamps.
-    it('stops shrinking at a legible floor', () => {
-      const { logoSide } = gridMetrics({ width: 400, height: 120 });
+    // The width is known from the window before the height is, so a seeded
+    // first frame still gets the columns right and falls back on the rows.
+    it('uses the designed row count when only the width is known', () => {
+      const metrics = gridMetrics({ width: 432, height: Number.POSITIVE_INFINITY });
 
-      expect(logoSide).toBe(MIN_LOGO_SIDE);
+      expect(metrics.rows).toBe(GRID_FALLBACK_ROWS);
+      expect(metrics.tileWidth).toBeCloseTo(128, 0);
+      expect(metrics.plateHeight).toBeGreaterThan(0);
     });
-  });
-
-  it('grows the tile on a wider screen', () => {
-    const small = gridMetrics({ width: 320, height: 776 });
-    const large = gridMetrics({ width: 480, height: 776 });
-
-    expect(large.logoSide).toBeGreaterThan(small.logoSide);
   });
 });

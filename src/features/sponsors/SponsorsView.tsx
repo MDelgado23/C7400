@@ -12,7 +12,7 @@ import {
 import { Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
-import { GRID_CONTENT_PADDING, GRID_GAP, gridMetrics, gridSlots } from './grid';
+import { GRID_COLUMNS, GRID_CONTENT_PADDING, GRID_GAP, gridMetrics, gridSlots } from './grid';
 import type { SponsorsStatus } from './sponsorsStatus';
 import type { Sponsor } from '../../core/sponsors/sponsor';
 
@@ -24,41 +24,48 @@ interface SponsorsViewProps {
 }
 
 /**
+ * Everything above the grid on this screen: the status bar, the heading, the
+ * mini-player, the tab bar and the system navigation.
+ *
+ * Used ONLY to seed the very first frame, so the row count starts close instead
+ * of at the fallback and visibly re-flowing. `onLayout` replaces it with the
+ * real measurement a frame later, which is why being a few points off here
+ * costs nothing. Measured at 267dp on the test device.
+ */
+const CHROME_ESTIMATE = 268;
+
+/**
  * Presentational sponsors grid.
  *
- * THREE COLUMNS, AND THE FIRST SCREEN IS ALWAYS A WHOLE 3x3. A radio with five
- * sponsors shows five logos and four quiet holes: five of nine places taken,
- * rather than a section that ran out halfway down. Past nine the holes stop —
- * they would be below the fold, where they are only empty space to scroll past.
+ * THREE COLUMNS, AND AS MANY ROWS AS THE SCREEN HAS ROOM FOR. The columns are
+ * fixed because they set the width of a tile; the rows are measured, because a
+ * count chosen on one phone is only ever right on that phone — a 3x3 left a
+ * third of the test device empty. The rows are stretched to meet the measured
+ * height exactly, so the section fills whatever screen it lands on.
+ *
+ * THE SCREEN IS ALWAYS FULL. Sponsors fill the slots in order and the rest are
+ * drawn as holes, so five of them read as five places taken rather than as a
+ * section that stopped. Past the visible slots the holes stop: below the fold
+ * they would only be empty space to scroll past.
  *
  * The holes are deliberately STILL. A shimmering skeleton says "this is
- * loading", and a skeleton that never resolves says it forever — the same kind
- * of confident lie this codebase spends its time removing. Nothing moves, so
+ * loading", and one that never resolves says it forever — the same kind of
+ * confident lie this codebase spends its time removing. Nothing moves, so
  * nothing is promised.
- *
- * The tile is sized against the measured box rather than a percentage, because
- * three columns is only half the constraint: three ROWS have to fit too, and on
- * a short screen the height is what runs out. See `gridMetrics`.
  */
 export function SponsorsView({ status, sponsors, onRetry, onSelectSponsor }: SponsorsViewProps) {
   const window = useWindowDimensions();
   /**
-   * Seeded from the window and refined by layout.
+   * Seeded from the window, then replaced by the real measurement.
    *
-   * Both values are OUTER boxes, the same thing `onLayout` reports, because
-   * `gridMetrics` is what subtracts the content padding. Mixing the two — an
-   * inner seed and an outer measurement — is exactly what put two tiles on a
-   * row instead of three.
-   *
-   * The width is known before the first paint, and on every phone modelled so
-   * far the width is what limits the tile, so the first frame is already the
-   * right size and nothing visibly snaps into place. The height starts
-   * unbounded and only ever makes the tile SMALLER, on the screens too short to
-   * hold three rows of it.
+   * Both are OUTER boxes — the same thing `onLayout` reports — because
+   * `gridMetrics` is what subtracts the content padding. Mixing the two, an
+   * inner seed against an outer measurement, is exactly what once put two tiles
+   * on a row instead of three.
    */
   const [box, setBox] = useState({
     width: window.width,
-    height: Number.POSITIVE_INFINITY,
+    height: window.height - CHROME_ESTIMATE,
   });
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -101,7 +108,7 @@ export function SponsorsView({ status, sponsors, onRetry, onSelectSponsor }: Spo
     return (
       <Screen>
         <View style={styles.center}>
-          {/* No grid of nine holes here: with nobody signed up at all, nine
+          {/* No grid of holes here: with nobody signed up at all, a screen of
               placeholders would read as a section still loading. */}
           <AppText muted>Todavía no hay auspiciantes</AppText>
         </View>
@@ -109,8 +116,9 @@ export function SponsorsView({ status, sponsors, onRetry, onSelectSponsor }: Spo
     );
   }
 
-  const { tileWidth, logoSide } = gridMetrics(box);
-  const slots = gridSlots(sponsors);
+  const { tileWidth, tileHeight, plateHeight, rows } = gridMetrics(box);
+  const slots = gridSlots(sponsors, GRID_COLUMNS * rows);
+  const tileSize = { width: tileWidth, height: tileHeight };
 
   return (
     <Screen padded={false}>
@@ -119,61 +127,67 @@ export function SponsorsView({ status, sponsors, onRetry, onSelectSponsor }: Spo
       </AppText>
       {/*
         A ScrollView with a wrapping row rather than FlatList + numColumns.
-        Virtualising a handful of tiles buys nothing, and numColumns stretches
+        Virtualising a screenful of tiles buys nothing, and numColumns stretches
         the items of an incomplete last row unless it is fought — which is
         precisely the case this layout has to get right.
-
-        `flexGrow` with a centred content box does one more job: when the nine
-        fit, the leftover height becomes symmetric margin and the grid reads as
-        placed; when there are more than nine, it scrolls from the top as usual.
       */}
-      <ScrollView contentContainerStyle={styles.scroll} onLayout={handleLayout}>
+      <ScrollView
+        testID="sponsors-grid"
+        contentContainerStyle={styles.scroll}
+        onLayout={handleLayout}
+      >
         <View style={styles.grid}>
-          {slots.map((slot) =>
-            slot.kind === 'sponsor' ? (
-              <Pressable
-                key={slot.sponsor.id}
-                testID={`sponsor-${slot.sponsor.id}`}
-                accessibilityRole="button"
-                accessibilityLabel={slot.sponsor.name}
-                onPress={() => onSelectSponsor(slot.sponsor)}
-                style={[styles.tile, { width: tileWidth }]}
-              >
-                {/*
-                  A light plate behind every logo. Sponsors supply whatever
-                  artwork they have, and a dark logo on transparency would
-                  vanish into the navy background — the one thing this section
-                  may never do to the businesses paying for it.
-                */}
-                <Image
-                  testID={`logo-${slot.sponsor.id}`}
-                  source={{ uri: slot.sponsor.logoUrl }}
-                  style={[styles.logo, { width: logoSide, height: logoSide }]}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-                <AppText variant="caption" numberOfLines={1} style={styles.tileName}>
-                  {slot.sponsor.name}
-                </AppText>
-              </Pressable>
-            ) : (
-              <View
-                key={slot.key}
-                testID={`slot-${slot.key}`}
-                // Carries no information: announcing four blanks after the real
-                // sponsors would make the section longer to listen to and no
-                // more useful.
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-                style={[styles.tile, styles.emptyTile, { width: tileWidth }]}
-              >
-                <View style={[styles.emptyPlate, { width: logoSide, height: logoSide }]} />
-                {/* Reserves the same line the sponsor names occupy, so a hole is
-                    exactly the size of the tile it is standing in for. */}
-                <AppText variant="caption"> </AppText>
-              </View>
-            ),
-          )}
+          {tileWidth === 0
+            ? null
+            : slots.map((slot) =>
+                slot.kind === 'sponsor' ? (
+                  <Pressable
+                    key={slot.sponsor.id}
+                    testID={`sponsor-${slot.sponsor.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={slot.sponsor.name}
+                    onPress={() => onSelectSponsor(slot.sponsor)}
+                    style={[styles.tile, tileSize]}
+                  >
+                    {/*
+                      The plate spans the tile's full WIDTH and takes the height
+                      that is left, so it is a little wider than it is tall. That
+                      suits the artwork most businesses actually hand over — a
+                      horizontal wordmark — which uses the whole plate instead of
+                      shrinking to fit a square; a compact logo simply centres.
+                      Light, because a dark logo on transparency would vanish
+                      into the navy, and that is the one thing this section may
+                      never do to the businesses paying for it.
+                    */}
+                    <Image
+                      testID={`logo-${slot.sponsor.id}`}
+                      source={{ uri: slot.sponsor.logoUrl }}
+                      style={[styles.plate, { height: plateHeight }]}
+                      resizeMode="contain"
+                      accessible={false}
+                    />
+                    <AppText variant="caption" numberOfLines={1} style={styles.tileName}>
+                      {slot.sponsor.name}
+                    </AppText>
+                  </Pressable>
+                ) : (
+                  <View
+                    key={slot.key}
+                    testID={`slot-${slot.key}`}
+                    // Carries no information: announcing a dozen blanks after
+                    // the real sponsors would make the section longer to listen
+                    // to and no more useful.
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    style={[styles.tile, styles.emptyTile, tileSize]}
+                  >
+                    <View style={[styles.emptyPlate, { height: plateHeight }]} />
+                    {/* Holds the line the sponsor names occupy, so a hole is
+                        exactly the size of the tile it stands in for. */}
+                    <AppText variant="caption"> </AppText>
+                  </View>
+                ),
+              )}
         </View>
       </ScrollView>
     </Screen>
@@ -190,7 +204,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   heading: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: GRID_CONTENT_PADDING },
+  scroll: { padding: GRID_CONTENT_PADDING },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -203,8 +217,10 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: spacing.xs,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  logo: {
+  plate: {
+    width: '100%',
     borderRadius: radius.sm,
     backgroundColor: colors.text,
   },
@@ -217,6 +233,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   emptyPlate: {
+    width: '100%',
     borderRadius: radius.sm,
     backgroundColor: colors.border,
     opacity: 0.35,

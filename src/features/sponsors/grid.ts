@@ -3,45 +3,60 @@ import type { Sponsor } from '../../core/sponsors/sponsor';
 /**
  * The shape of the sponsors grid — PURE.
  *
- * Two rules live here, and both exist because of the same product decision:
- * THE FIRST SCREEN IS ALWAYS A WHOLE 3x3.
+ * THREE COLUMNS, AND AS MANY ROWS AS THE SCREEN HAS ROOM FOR.
  *
- * 1. A short list is padded with quiet holes, so five sponsors read as "five of
- *    nine places taken" rather than as a section that ran out halfway down.
- * 2. The tile is sized against BOTH the width and the height of whatever box it
- *    was given, so nine slots fit on a small phone as surely as on a big one.
+ * The columns are fixed because they are what sets the width of a tile. The
+ * ROWS are not: a 3x3 that looks right on one phone leaves a third of a taller
+ * one empty, and a fixed count can only ever be correct on the device it was
+ * chosen on. So the rows are derived from the measured height, the tiles are
+ * stretched to meet it exactly, and the section fills whatever screen it lands
+ * on — five rows here, four on something shorter, six on something longer.
  *
- * Kept out of the component because the interesting cases are all arithmetic —
- * a short screen, an unmeasured box, a list of five — and each one is a sentence
- * here instead of a device to go and find.
+ * Everything is arithmetic on a measured box, which is why it lives here and
+ * not in the component: a short screen, an unmeasured frame, a list of five are
+ * each a sentence in a test rather than a device to go and borrow.
  */
 
 export const GRID_COLUMNS = 3;
-export const GRID_ROWS = 3;
-/** The slots that must be filled before anything is allowed to scroll. */
-export const GRID_MIN_SLOTS = GRID_COLUMNS * GRID_ROWS;
 
 /**
- * Smallest logo worth drawing.
- *
- * Below this the grid stops shrinking and is allowed to overflow instead. Nine
- * unreadable stamps serve nobody — least of all the businesses paying to be
- * one of them — so on a screen too short to hold three legible rows, scrolling
- * is the better failure.
+ * Rows to assume before anything has been measured, and the floor afterwards.
+ * Three is the shape the section was designed around, so a first frame drawn
+ * with it is never wildly wrong.
  */
-export const MIN_LOGO_SIDE = 56;
+export const GRID_FALLBACK_ROWS = 3;
+
+/**
+ * Shortest plate worth drawing.
+ *
+ * Below this the grid stops shrinking and is allowed to overflow instead. A
+ * screen of unreadable stamps serves nobody — least of all the businesses
+ * paying to be one of them — so where three legible rows will not fit,
+ * scrolling is the better failure.
+ */
+export const MIN_PLATE_HEIGHT = 56;
+
+/** Space between tiles. */
+export const GRID_GAP = 8;
+/** Padding the scroll content sits inside, on each edge. */
+export const GRID_CONTENT_PADDING = 16;
+/** Tile padding on each side. */
+const TILE_PADDING = 8;
+/** Space under the plate: the inner gap plus one line of the sponsor's name. */
+const LABEL_BLOCK = 4 + 16;
 
 export type GridSlot =
   | { kind: 'sponsor'; sponsor: Sponsor }
   | { kind: 'empty'; key: string };
 
 /**
- * PURE. The tiles to draw, padded to a full first screen.
+ * PURE. The tiles to draw, padded out to a full screen.
  *
- * Padding stops at `minSlots`. Past that the holes would sit below the fold,
- * where they would only be empty space somebody had to scroll to find.
+ * Padding stops at `minSlots`, which the caller computes from the rows that
+ * actually fit. Past that the holes would sit below the fold, where they would
+ * only be empty space somebody had to scroll to find.
  */
-export function gridSlots(sponsors: Sponsor[], minSlots: number = GRID_MIN_SLOTS): GridSlot[] {
+export function gridSlots(sponsors: Sponsor[], minSlots: number): GridSlot[] {
   const slots: GridSlot[] = sponsors.map((sponsor) => ({ kind: 'sponsor', sponsor }));
   for (let index = slots.length; index < minSlots; index += 1) {
     // Indexed rather than positional: React needs these to be stable and
@@ -63,55 +78,71 @@ interface GridBox {
    * never wrong. The input was. Owning the padding removes the chance.
    */
   width: number;
+  /** May be infinite on the first frame, before the height is known. */
   height: number;
 }
 
 export interface GridMetrics {
   /** Width of one tile, including its own padding. */
   tileWidth: number;
-  /** Side of the square logo inside a tile. */
-  logoSide: number;
+  /** Height of one tile. Rows of these fill the box exactly. */
+  tileHeight: number;
+  /** Height of the plate the logo is drawn on. It spans the tile's full width. */
+  plateHeight: number;
+  /** How many rows fit. Times the columns, this is the slot count to fill. */
+  rows: number;
 }
 
-/** Space between tiles. */
-export const GRID_GAP = 8;
-/** Padding the scroll content sits inside, on each edge. */
-export const GRID_CONTENT_PADDING = 16;
-/** Tile padding on each side. */
-const TILE_PADDING = 8;
-/** Space under the logo: the inner gap plus one line of the sponsor's name. */
-const LABEL_BLOCK = 4 + 16;
-
 /**
- * PURE. How big a tile can be inside the measured box.
+ * PURE. How the grid divides up the measured box.
  *
- * THE HEIGHT IS A REAL CONSTRAINT, NOT A FORMALITY. Sizing on width alone looks
- * correct on every phone anyone tests on, and then fails on the short ones: a
- * 320x568 screen has room for a 91dp tile across but only 76dp down, so three
- * rows of the width-derived size push the last row off the screen — on the one
- * section whose whole point is that all nine are visible at once.
+ * THE PLATE IS NOT SQUARE, and that is the point rather than a compromise. Once
+ * the rows are stretched to fill the height, a tile is a little shorter than it
+ * is wide — so the plate spans the tile's full WIDTH and takes whatever height
+ * is left. A wide wordmark, which is what most businesses actually hand over,
+ * then uses the whole plate instead of shrinking to fit a square; a square logo
+ * simply centres itself. Both are drawn with `contain`, so neither distorts.
  *
- * An unmeasured box (the frame before onLayout reports) yields zero rather than
- * a guess, and the view draws nothing for that frame instead of a wrong size
- * that visibly snaps into place.
+ * An unmeasured box yields zeroes rather than a guess, and the caller draws
+ * nothing for that frame instead of a wrong size that visibly snaps into place.
  */
 export function gridMetrics({ width, height }: GridBox): GridMetrics {
-  if (width <= 0 || height <= 0) return { tileWidth: 0, logoSide: 0 };
+  const empty = { tileWidth: 0, tileHeight: 0, plateHeight: 0, rows: GRID_FALLBACK_ROWS };
+  if (!(width > 0)) return empty;
 
-  // What is left once the content padding has taken its share of both edges.
   const innerWidth = width - GRID_CONTENT_PADDING * 2;
-  const innerHeight = height - GRID_CONTENT_PADDING * 2;
-  if (innerWidth <= 0 || innerHeight <= 0) return { tileWidth: 0, logoSide: 0 };
+  if (innerWidth <= 0) return empty;
 
   const tileWidth = (innerWidth - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
-  const tileHeight = (innerHeight - GRID_GAP * (GRID_ROWS - 1)) / GRID_ROWS;
 
-  const byWidth = tileWidth - TILE_PADDING * 2;
-  const byHeight = tileHeight - TILE_PADDING * 2 - LABEL_BLOCK;
+  // The tile the section was designed around: a square plate, plus the name.
+  const idealTileHeight = tileWidth + LABEL_BLOCK;
+
+  const innerHeight = height - GRID_CONTENT_PADDING * 2;
+  if (!Number.isFinite(innerHeight) || innerHeight <= 0) {
+    return {
+      tileWidth,
+      tileHeight: idealTileHeight,
+      plateHeight: Math.max(tileWidth - TILE_PADDING * 2, MIN_PLATE_HEIGHT),
+      rows: GRID_FALLBACK_ROWS,
+    };
+  }
+
+  // ROUNDED UP, so the rows always add up to more than the box and are then
+  // stretched DOWN to meet it exactly. Rounding to nearest would sometimes land
+  // short and leave the strip of dead space this whole function exists to
+  // remove. The cost is bounded: one extra row among n shrinks a tile by at
+  // most n/(n+1), so about a fifth in the worst case.
+  const rows = Math.max(
+    1,
+    Math.ceil((innerHeight + GRID_GAP) / (idealTileHeight + GRID_GAP)),
+  );
+  const tileHeight = (innerHeight - GRID_GAP * (rows - 1)) / rows;
 
   return {
-    tileWidth: Math.max(tileWidth, 0),
-    // Whichever runs out first decides, with a floor under both — see MIN_LOGO_SIDE.
-    logoSide: Math.max(Math.min(byWidth, byHeight), MIN_LOGO_SIDE),
+    tileWidth,
+    tileHeight,
+    plateHeight: Math.max(tileHeight - TILE_PADDING * 2 - LABEL_BLOCK, MIN_PLATE_HEIGHT),
+    rows,
   };
 }

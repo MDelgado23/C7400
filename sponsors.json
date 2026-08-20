@@ -16,6 +16,15 @@
       "description": "Entrada de ejemplo para verificar la sección. Reemplazar por los auspiciantes reales — ver SPONSORS.md",
       "website": "https://www.hauswagenolavarria.com.ar/",
       "address": "Ruta 226 Km. 292 – Olavarría"
+    },
+    {
+      "id": "haus",
+      "pos": 30,
+      "name": "Hauswagen Olavarrìa",
+      "logoUrl": "https://i.ibb.co/G3tLJ0Yr/hauswagen.png",
+      "description": "Entrada de ejemplo para verificar la sección. Reemplazar por los auspiciantes reales — ver SPONSORS.md",
+      "website": "https://www.hauswagenolavarria.com.ar/",
+      "address": "Ruta 226 Km. 292 – Olavarría"
     }
   ]
 }

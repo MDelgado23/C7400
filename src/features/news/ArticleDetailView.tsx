@@ -1,8 +1,17 @@
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
+import { DEFAULT_ASPECT_RATIO } from './photoAsset';
 import type { ArticleDetail } from './newsMapping';
 
 export type DetailStatus = 'loading' | 'error' | 'ready';
@@ -21,7 +30,19 @@ interface ArticleDetailViewProps {
   onRetry: () => void;
   isSaved: boolean;
   onToggleSave: () => void;
+  /** Opens the photo on its own, uncropped and zoomable. */
+  onOpenPhoto: (uri: string) => void;
 }
+
+/**
+ * The most of the screen a photo may take before the headline is pushed off it.
+ *
+ * The frame is shaped like the photo, which is right for the 85% that are
+ * roughly landscape and wrong for a very tall one: at its true shape a 0.46
+ * portrait would be twice the height of the screen. It is capped here and the
+ * rest is one tap away.
+ */
+const MAX_PHOTO_SHARE = 0.55;
 
 /**
  * Presentational article detail. Renders the full body as native text
@@ -38,7 +59,9 @@ export function ArticleDetailView({
   onRetry,
   isSaved,
   onToggleSave,
+  onOpenPhoto,
 }: ArticleDetailViewProps) {
+  const { height: windowHeight } = useWindowDimensions();
   if (status === 'loading') {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
@@ -72,7 +95,23 @@ export function ArticleDetailView({
     <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <ScrollView contentContainerStyle={styles.content}>
         {article.imageUrl ? (
-          <Image source={{ uri: article.imageUrl }} style={styles.hero} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ver la foto completa"
+            onPress={() => onOpenPhoto(article.imageUrl as string)}
+          >
+            <Image
+              testID="article-photo"
+              source={{ uri: article.imageUrl }}
+              style={[
+                styles.hero,
+                {
+                  aspectRatio: article.imageAspectRatio ?? DEFAULT_ASPECT_RATIO,
+                  maxHeight: windowHeight * MAX_PHOTO_SHARE,
+                },
+              ]}
+            />
+          </Pressable>
         ) : null}
         {article.kicker ? (
           <AppText variant="caption" muted>
@@ -136,7 +175,6 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.sm },
   hero: {
     width: '100%',
-    height: 200,
     borderRadius: radius.md,
     backgroundColor: colors.primaryDark,
     marginBottom: spacing.sm,

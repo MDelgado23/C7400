@@ -1,9 +1,11 @@
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import {
   ArticleDetailView,
   type DetailStatus,
   type ReadableArticle,
 } from '../ArticleDetailView';
+import { DEFAULT_ASPECT_RATIO } from '../photoAsset';
 import type { ArticleDetail } from '../newsMapping';
 
 const detail: ArticleDetail = {
@@ -24,17 +26,20 @@ async function renderView(
 ) {
   const onRetry = jest.fn();
   const onToggleSave = jest.fn();
-  const view = await render(
-    <ArticleDetailView
-      status={status}
-      article={article}
-      onRetry={onRetry}
-      isSaved={false}
-      onToggleSave={onToggleSave}
-      {...extra}
-    />,
-  );
-  return { onRetry, onToggleSave, view };
+  const onOpenPhoto = jest.fn();
+  // Built as an object so `extra` can override any of these without the spread
+  // making the required props look optional to the type checker.
+  const props = {
+    status,
+    article,
+    onRetry,
+    isSaved: false,
+    onToggleSave,
+    onOpenPhoto,
+    ...extra,
+  } as React.ComponentProps<typeof ArticleDetailView>;
+  const view = await render(<ArticleDetailView {...props} />);
+  return { onRetry, onToggleSave, onOpenPhoto, view };
 }
 
 describe('ArticleDetailView', () => {
@@ -107,5 +112,52 @@ describe('a saved copy that was cut', () => {
     const { view } = await renderView('ready', detail);
 
     expect(view.queryByText(/recortada/i)).toBeNull();
+  });
+});
+
+// The old frame was a fixed 200pt band: every photo was cropped into a 2:1 box,
+// which for the 12% of them that are portrait meant showing a slice. The frame
+// is shaped like the photo now, and what will not fit opens on its own.
+describe('the photo', () => {
+  it('takes the shape of the photo it is showing', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.75 });
+
+    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(style.aspectRatio).toBeCloseTo(0.75, 3);
+  });
+
+  // Nothing to derive a shape from, so it falls back to the one most of the
+  // newsroom's photos have rather than to an arbitrary band.
+  it('falls back to a common shape when the photo has none', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: undefined });
+
+    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(style.aspectRatio).toBe(DEFAULT_ASPECT_RATIO);
+  });
+
+  // A very tall photo shaped honestly would push the headline off the screen,
+  // so the frame is capped and the rest is one tap away.
+  it('never lets the photo take the whole screen', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.4 });
+
+    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(style.maxHeight).toBeGreaterThan(0);
+  });
+
+  it('opens the photo on its own when tapped', async () => {
+    const { onOpenPhoto, view } = await renderView('ready', detail);
+
+    await fireEvent.press(view.getByLabelText('Ver la foto completa'));
+
+    expect(onOpenPhoto).toHaveBeenCalledWith('https://cdn/t720.jpeg');
+  });
+
+  it('offers nothing to open when the note has no photo', async () => {
+    const { view } = await renderView('ready', { ...detail, imageUrl: undefined });
+
+    expect(view.queryByLabelText('Ver la foto completa')).toBeNull();
   });
 });

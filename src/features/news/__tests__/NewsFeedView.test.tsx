@@ -17,10 +17,17 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-async function renderView(status: FeedStatus, data: NewsItem[] = []) {
+/** State of the paging that happens BELOW the list. */
+interface MoreState {
+  loadingMore?: boolean;
+  reachedEnd?: boolean;
+}
+
+async function renderView(status: FeedStatus, data: NewsItem[] = [], more: MoreState = {}) {
   const onRetry = jest.fn();
   const onSelectArticle = jest.fn();
   const onRefresh = jest.fn();
+  const onEndReached = jest.fn();
   const view = await render(
     <NewsFeedView
       status={status}
@@ -29,9 +36,12 @@ async function renderView(status: FeedStatus, data: NewsItem[] = []) {
       onSelectArticle={onSelectArticle}
       refreshing={false}
       onRefresh={onRefresh}
+      onEndReached={onEndReached}
+      loadingMore={more.loadingMore ?? false}
+      reachedEnd={more.reachedEnd ?? false}
     />,
   );
-  return { onRetry, onSelectArticle, onRefresh, view };
+  return { onRetry, onSelectArticle, onRefresh, onEndReached, view };
 }
 
 describe('NewsFeedView', () => {
@@ -93,6 +103,49 @@ describe('NewsFeedView', () => {
       await fireEvent(view.getByTestId('news-list'), 'refresh');
 
       expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // THE FEED ENDS. Not an endless scroll that keeps pulling until the phone
+  // gives up: it carries a week, and when the week is covered it says so and
+  // points at the notes the reader kept.
+  describe('reaching the bottom', () => {
+    it('asks for the next page when the list runs out', async () => {
+      const { onEndReached, view } = await renderView('ready', items);
+
+      await fireEvent(view.getByTestId('news-list'), 'endReached');
+
+      expect(onEndReached).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows that more is on the way while a page is in flight', async () => {
+      const { view } = await renderView('ready', items, { loadingMore: true });
+
+      expect(view.getByLabelText('Cargando más noticias')).toBeTruthy();
+    });
+
+    it('says where the week stops once there is nothing more', async () => {
+      const { view } = await renderView('ready', items, { reachedEnd: true });
+
+      expect(view.getByText(/Hasta acá/)).toBeTruthy();
+    });
+
+    // Announcing the end while a page is still coming would be a lie the reader
+    // watches correct itself a second later.
+    it('says nothing about the end while a page is still coming', async () => {
+      const { view } = await renderView('ready', items, {
+        loadingMore: true,
+        reachedEnd: true,
+      });
+
+      expect(view.queryByText(/Hasta acá/)).toBeNull();
+    });
+
+    it('shows neither while there is simply more to scroll', async () => {
+      const { view } = await renderView('ready', items);
+
+      expect(view.queryByLabelText('Cargando más noticias')).toBeNull();
+      expect(view.queryByText(/Hasta acá/)).toBeNull();
     });
   });
 });

@@ -34,6 +34,12 @@ interface NewsFeedViewProps {
   /** Whether a pull-to-refresh is in flight. */
   refreshing: boolean;
   onRefresh: () => void;
+  /** The reader scrolled to the bottom and there may be another page. */
+  onEndReached: () => void;
+  /** Whether that next page is in flight. */
+  loadingMore: boolean;
+  /** Whether the week has been covered and there is nothing more to ask for. */
+  reachedEnd: boolean;
 }
 
 /**
@@ -47,6 +53,9 @@ export function NewsFeedView({
   onSelectArticle,
   refreshing,
   onRefresh,
+  onEndReached,
+  loadingMore,
+  reachedEnd,
 }: NewsFeedViewProps) {
   // Read once per render rather than per card, so every time on screen is
   // measured from the same instant and two notes a second apart cannot end up
@@ -107,6 +116,27 @@ export function NewsFeedView({
             tintColor={colors.text}
             colors={[colors.primary]}
           />
+        }
+        // Half a screen of warning: enough for the next page to land before the
+        // reader hits the bottom, without pulling pages they never look at.
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator
+              accessibilityLabel="Cargando más noticias"
+              color={colors.text}
+              style={styles.footer}
+            />
+          ) : reachedEnd ? (
+            // Said out loud rather than left as a list that just stops. It also
+            // does the one useful thing an ending can do: point at where the
+            // older notes actually are.
+            <AppText variant="caption" muted style={styles.footerText}>
+              Hasta acá llegan las noticias de la semana. Las más viejas quedan en las que
+              guardaste.
+            </AppText>
+          ) : null
         }
         renderItem={({ item }) => (
           <Pressable
@@ -187,4 +217,6 @@ const styles = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Shrinks so a long section name never pushes the time off the card.
   kicker: { flexShrink: 1 },
+  footer: { paddingVertical: spacing.lg },
+  footerText: { textAlign: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.md },
 });

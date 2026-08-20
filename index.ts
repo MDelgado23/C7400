@@ -7,6 +7,8 @@ import { setAuthProvider, startAnonymousSession } from './src/core/auth/authServ
 import { firebaseAuthProvider } from './src/core/auth/firebaseAuthAdapter';
 import { setFavoritesProvider } from './src/core/favorites/favoritesService';
 import { firestoreFavoritesProvider } from './src/core/favorites/firestoreFavoritesAdapter';
+import { setSponsorsStore } from './src/core/sponsors/sponsorsCache';
+import { asyncStorageSponsorsStore } from './src/core/sponsors/asyncStorageSponsorsStore';
 
 // Registered HERE, at module scope, and deliberately not from a React effect.
 // `config_fallback_used` is reported from inside `loadRemoteConfig()`, which is
@@ -30,6 +32,13 @@ setAuthProvider(firebaseAuthProvider);
 // follows the signed-in user, so it has to be listening before the session is
 // restored or it would miss the report that tells it whose list to open.
 setFavoritesProvider(firestoreFavoritesProvider);
+
+// Storage for the sponsors cache, registered at module scope for the same
+// reason as the rest: the Auspiciantes tab reads the cache in its first effect,
+// and an adapter registered from a React effect could lose that race — the port
+// would answer "nothing cached", the grid would show a spinner it did not need,
+// and the phone would pay for a full download it already had on disk.
+setSponsorsStore(asyncStorageSponsorsStore);
 
 // Give the device an identity so anything it saves outlives the session.
 //

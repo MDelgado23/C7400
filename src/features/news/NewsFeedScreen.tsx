@@ -13,7 +13,7 @@ interface NewsFeedScreenProps {
  * view (loading/error/empty/ready).
  */
 export function NewsFeedScreen({ onSelectArticle }: NewsFeedScreenProps) {
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, isRefetching, refetch } = useQuery({
     queryKey: ['news'],
     queryFn: fetchNews,
   });
@@ -32,6 +32,13 @@ export function NewsFeedScreen({ onSelectArticle }: NewsFeedScreenProps) {
         void refetch();
       }}
       onSelectArticle={onSelectArticle}
+      // `isRefetching` and not `isFetching`: the first load is already covered
+      // by the loading state, and showing the spinner twice for it would put a
+      // pull-to-refresh indicator over a screen nobody pulled.
+      refreshing={isRefetching}
+      onRefresh={() => {
+        void refetch();
+      }}
     />
   );
 }

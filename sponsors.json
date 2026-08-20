@@ -18,13 +18,25 @@
       "address": "Ruta 226 Km. 292 – Olavarría"
     },
     {
-      "id": "haus2",
+      "id": "area226",
       "pos": 30,
-      "name": "Hauswagen Olavarrìa",
-      "logoUrl": "https://i.ibb.co/G3tLJ0Yr/hauswagen.png",
+      "name": "Area 226",
+      "logoUrl": "https://i.ibb.co/JjSWVzCt/area226.png",
       "description": "Entrada de ejemplo para verificar la sección. Reemplazar por los auspiciantes reales — ver SPONSORS.md",
-      "website": "https://www.hauswagenolavarria.com.ar/",
-      "address": "Ruta 226 Km. 292 – Olavarría"
+      "instagram": "area226_olavarria",
+      "website": "https://lemont.com.ar/",
+      "address": "Ruta 226 Km. 295 – Olavarría"
+    },
+    {
+      "id": "cavellaneda",
+      "pos": 40,
+      "name": "Cementos Avellaneda",
+      "logoUrl": "https://i.ibb.co/wNtzxPVk/cementos-avellaneda.png",
+      "description": "Entrada de ejemplo para verificar la sección. Reemplazar por los auspiciantes reales — ver SPONSORS.md",
+      "instagram": "cementos.avellaneda",
+      "website": "https://cementosavellaneda.com.ar/",
+      "whatsapp": "5491143391200",
+      "phone": "08003332363"
     }
   ]
 }

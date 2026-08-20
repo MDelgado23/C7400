@@ -1,4 +1,4 @@
-import { fetchNews } from '../api/newsApi';
+import { fetchCategories, fetchNews } from '../api/newsApi';
 import { NEWS_PAGE_SIZE } from '../newsWindow';
 import { __resetRemoteConfigCache } from '../../../core/config/remoteConfig';
 
@@ -97,5 +97,79 @@ describe('fetchNews', () => {
     })) as unknown as typeof fetch;
 
     await expect(fetchNews()).rejects.toThrow('503');
+  });
+});
+
+describe('fetchNews, filtered by section', () => {
+  const LOCALES = '6837ac247af5dba70a5382e6';
+
+  // Verified against the live host: `?category=<id>` returns only that section.
+  // Filtering by NAME answers HTTP 500, so the id is what gets sent.
+  it('asks for one section when given its id', async () => {
+    const fn = mockFetch();
+
+    await fetchNews(0, LOCALES);
+
+    expect(urlOf(fn, fn.mock.calls.length - 1)).toContain(`category=${LOCALES}`);
+  });
+
+  it('pages inside the section', async () => {
+    const fn = mockFetch();
+
+    await fetchNews(40, LOCALES);
+
+    const url = urlOf(fn, fn.mock.calls.length - 1);
+    expect(url).toContain('skip=40');
+    expect(url).toContain(`category=${LOCALES}`);
+  });
+
+  it.each([
+    ['no section is given', undefined],
+    ['the section is blank', '   '],
+  ])('asks for everything when %s', async (_label, category) => {
+    const fn = mockFetch();
+
+    await fetchNews(0, category);
+
+    expect(urlOf(fn, fn.mock.calls.length - 1)).not.toContain('category');
+  });
+});
+
+describe('fetchCategories', () => {
+  it('returns the sections, written for a chip', async () => {
+    mockFetch({ data: [{ id: 'a', name: 'LOCALES' }, { id: 'b', name: 'LA REGIÓN' }] });
+
+    await expect(fetchCategories()).resolves.toEqual([
+      { id: 'a', name: 'Locales' },
+      { id: 'b', name: 'La Región' },
+    ]);
+  });
+
+  it('asks the category endpoint', async () => {
+    const fn = mockFetch({ data: [] });
+
+    await fetchCategories();
+
+    expect(urlOf(fn, fn.mock.calls.length - 1)).toMatch(/\/category$/);
+  });
+
+  // The chips are decoration around the feed: if the list cannot be read they
+  // simply do not appear, and the news is unaffected.
+  it('comes back empty rather than throwing on a bad status', async () => {
+    globalThis.fetch = jest.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+
+    await expect(fetchCategories()).resolves.toEqual([]);
+  });
+
+  it('comes back empty when the network is gone', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+
+    await expect(fetchCategories()).resolves.toEqual([]);
   });
 });

@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, radius, spacing } from '../../ui/theme';
+import { CategoryBar } from './CategoryBar';
 import { publishedLabel } from './publishedLabel';
+import { colors, radius, spacing } from '../../ui/theme';
+import type { NewsCategory } from './newsCategories';
 import type { NewsItem } from './newsMapping';
 
 export type FeedStatus = 'loading' | 'error' | 'empty' | 'ready';
@@ -40,11 +42,21 @@ interface NewsFeedViewProps {
   loadingMore: boolean;
   /** Whether the week has been covered and there is nothing more to ask for. */
   reachedEnd: boolean;
+  /** The newsroom's sections. Empty when they could not be fetched. */
+  categories: NewsCategory[];
+  /** The section being shown, or null for the whole feed. */
+  selectedCategoryId: string | null;
+  onSelectCategory: (id: string | null) => void;
 }
 
 /**
  * Presentational news feed. Renders one of four discrete states so the
  * container only has to map query state → status. Pure: no data fetching here.
+ *
+ * THE SECTION CHIPS SIT OUTSIDE THE STATE SWITCH, deliberately. Filter to a
+ * section that happens to have no news this week and the body becomes the empty
+ * state — if the chips went with it, the reader would be shut inside a section
+ * with no way back to the feed.
  */
 export function NewsFeedView({
   status,
@@ -56,24 +68,28 @@ export function NewsFeedView({
   onEndReached,
   loadingMore,
   reachedEnd,
+  categories,
+  selectedCategoryId,
+  onSelectCategory,
 }: NewsFeedViewProps) {
   // Read once per render rather than per card, so every time on screen is
   // measured from the same instant and two notes a second apart cannot end up
   // labelled out of order.
   const now = Date.now();
-  if (status === 'loading') {
-    return (
-      <Screen>
+
+  return (
+    <Screen padded={false}>
+      <CategoryBar
+        categories={categories}
+        selectedId={selectedCategoryId}
+        onSelect={onSelectCategory}
+      />
+
+      {status === 'loading' ? (
         <View style={styles.center}>
           <ActivityIndicator accessibilityLabel="Cargando noticias" color={colors.text} />
         </View>
-      </Screen>
-    );
-  }
-
-  if (status === 'error') {
-    return (
-      <Screen>
+      ) : status === 'error' ? (
         <View style={styles.center}>
           <AppText style={styles.errorText}>No pudimos cargar las noticias</AppText>
           <Pressable
@@ -86,104 +102,96 @@ export function NewsFeedView({
             <AppText variant="subtitle">Reintentar</AppText>
           </Pressable>
         </View>
-      </Screen>
-    );
-  }
-
-  if (status === 'empty') {
-    return (
-      <Screen>
+      ) : status === 'empty' ? (
         <View style={styles.center}>
-          <AppText muted>No hay noticias por ahora</AppText>
+          {/* Which kind of empty matters: a quiet week is the app working, a
+              section with nothing in it is a filter to undo. */}
+          <AppText muted style={styles.emptyText}>
+            {selectedCategoryId === null
+              ? 'No hay noticias por ahora'
+              : 'No hay noticias de esta sección en la última semana'}
+          </AppText>
         </View>
-      </Screen>
-    );
-  }
-
-  return (
-    <Screen padded={false}>
-      <FlatList
-        testID="news-list"
-        data={items}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        // The gesture everybody makes on a feed by reflex. Until now it did
-        // nothing at all.
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.text}
-            colors={[colors.primary]}
-          />
-        }
-        // Half a screen of warning: enough for the next page to land before the
-        // reader hits the bottom, without pulling pages they never look at.
-        onEndReached={onEndReached}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator
-              accessibilityLabel="Cargando más noticias"
-              color={colors.text}
-              style={styles.footer}
+      ) : (
+        <FlatList
+          testID="news-list"
+          data={items}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          // The gesture everybody makes on a feed by reflex.
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.text}
+              colors={[colors.primary]}
             />
-          ) : reachedEnd ? (
-            // Said out loud rather than left as a list that just stops. It also
-            // does the one useful thing an ending can do: point at where the
-            // older notes actually are.
-            <AppText variant="caption" muted style={styles.footerText}>
-              Hasta acá llegan las noticias de la semana. Las más viejas quedan en las que
-              guardaste.
-            </AppText>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            testID={`article-${item.id}`}
-            accessibilityRole="button"
-            onPress={() => onSelectArticle(item)}
-            style={styles.card}
-          >
-            {/* Thumb-sized variant, not the hero: this box is 72pt. */}
-            {item.thumbUrl ?? item.imageUrl ? (
-              <Image
-                source={{ uri: item.thumbUrl ?? item.imageUrl }}
-                style={styles.thumb}
+          }
+          // Half a screen of warning: enough for the next page to land before
+          // the reader hits the bottom, without pulling pages nobody looks at.
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator
+                accessibilityLabel="Cargando más noticias"
+                color={colors.text}
+                style={styles.footer}
               />
-            ) : (
-              <View style={styles.thumb} />
-            )}
-            <View style={styles.cardBody}>
-              {/*
-                The section and the time share a line: between them they answer
-                "what kind of news is this, and is it happening now" before the
-                headline has even been read.
-              */}
-              <View style={styles.meta}>
-                {item.kicker ? (
-                  <AppText variant="caption" muted numberOfLines={1} style={styles.kicker}>
-                    {item.kicker}
-                  </AppText>
-                ) : null}
-                {/*
-                  Absent rather than filled in when the date cannot be read.
-                  "Fecha desconocida" would take the same room to say nothing,
-                  and a wrong time on a news card is worse than no time at all.
-                */}
-                {publishedLabel(item.publishedAt, now) !== undefined ? (
-                  <AppText testID={`published-${item.id}`} variant="caption" muted>
-                    {publishedLabel(item.publishedAt, now)}
-                  </AppText>
-                ) : null}
-              </View>
-              <AppText variant="subtitle" numberOfLines={3}>
-                {item.title}
+            ) : reachedEnd ? (
+              // Said out loud rather than left as a list that just stops. It
+              // also does the one useful thing an ending can do: point at where
+              // the older notes actually are.
+              <AppText variant="caption" muted style={styles.footerText}>
+                Hasta acá llegan las noticias de la semana. Las más viejas quedan en las que
+                guardaste.
               </AppText>
-            </View>
-          </Pressable>
-        )}
-      />
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              testID={`article-${item.id}`}
+              accessibilityRole="button"
+              onPress={() => onSelectArticle(item)}
+              style={styles.card}
+            >
+              {/* Thumb-sized variant, not the hero: this box is 72pt. */}
+              {item.thumbUrl ?? item.imageUrl ? (
+                <Image source={{ uri: item.thumbUrl ?? item.imageUrl }} style={styles.thumb} />
+              ) : (
+                <View style={styles.thumb} />
+              )}
+              <View style={styles.cardBody}>
+                {/*
+                  The section and the time share a line: between them they answer
+                  "what kind of news is this, and is it happening now" before the
+                  headline has even been read.
+                */}
+                <View style={styles.meta}>
+                  {item.kicker ? (
+                    <AppText variant="caption" muted numberOfLines={1} style={styles.kicker}>
+                      {item.kicker}
+                    </AppText>
+                  ) : null}
+                  {/*
+                    Absent rather than filled in when the date cannot be read.
+                    "Fecha desconocida" would take the same room to say nothing,
+                    and a wrong time on a news card is worse than no time at all.
+                  */}
+                  {publishedLabel(item.publishedAt, now) !== undefined ? (
+                    <AppText testID={`published-${item.id}`} variant="caption" muted>
+                      {publishedLabel(item.publishedAt, now)}
+                    </AppText>
+                  ) : null}
+                </View>
+                <AppText variant="subtitle" numberOfLines={3}>
+                  {item.title}
+                </AppText>
+              </View>
+            </Pressable>
+          )}
+        />
+      )}
     </Screen>
   );
 }
@@ -193,6 +201,7 @@ const THUMB = 72;
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   errorText: { color: colors.error },
+  emptyText: { textAlign: 'center', paddingHorizontal: spacing.lg },
   retry: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,

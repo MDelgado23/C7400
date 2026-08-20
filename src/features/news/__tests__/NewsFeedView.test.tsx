@@ -21,6 +21,8 @@ afterEach(() => {
 interface MoreState {
   loadingMore?: boolean;
   reachedEnd?: boolean;
+  categories?: { id: string; name: string }[];
+  selectedCategoryId?: string | null;
 }
 
 async function renderView(status: FeedStatus, data: NewsItem[] = [], more: MoreState = {}) {
@@ -28,6 +30,7 @@ async function renderView(status: FeedStatus, data: NewsItem[] = [], more: MoreS
   const onSelectArticle = jest.fn();
   const onRefresh = jest.fn();
   const onEndReached = jest.fn();
+  const onSelectCategory = jest.fn();
   const view = await render(
     <NewsFeedView
       status={status}
@@ -39,9 +42,12 @@ async function renderView(status: FeedStatus, data: NewsItem[] = [], more: MoreS
       onEndReached={onEndReached}
       loadingMore={more.loadingMore ?? false}
       reachedEnd={more.reachedEnd ?? false}
+      categories={more.categories ?? []}
+      selectedCategoryId={more.selectedCategoryId ?? null}
+      onSelectCategory={onSelectCategory}
     />,
   );
-  return { onRetry, onSelectArticle, onRefresh, onEndReached, view };
+  return { onRetry, onSelectArticle, onRefresh, onEndReached, onSelectCategory, view };
 }
 
 describe('NewsFeedView', () => {
@@ -60,6 +66,50 @@ describe('NewsFeedView', () => {
   it('shows an empty message when there are no articles', async () => {
     const { view } = await renderView('empty');
     expect(view.getByText('No hay noticias por ahora')).toBeTruthy();
+  });
+
+  // Which kind of empty matters: a quiet week is the app working, a section
+  // with nothing in it is a filter the reader can undo.
+  describe('the sections', () => {
+    const SECTIONS = [
+      { id: 'loc', name: 'Locales' },
+      { id: 'pol', name: 'Policiales' },
+    ];
+
+    it('says a quiet SECTION is quiet, not that there is no news at all', async () => {
+      const { view } = await renderView('empty', [], {
+        categories: SECTIONS,
+        selectedCategoryId: 'pol',
+      });
+
+      expect(view.getByText(/No hay noticias de esta sección/)).toBeTruthy();
+    });
+
+    // THE WAY OUT. Filter to a section with nothing in it and the body becomes
+    // the empty state; if the chips went with it the reader would be shut
+    // inside a section with no way back to the feed.
+    it('keeps the chips reachable on the empty state', async () => {
+      const { onSelectCategory, view } = await renderView('empty', [], {
+        categories: SECTIONS,
+        selectedCategoryId: 'pol',
+      });
+
+      await fireEvent.press(view.getByLabelText('Todas'));
+
+      expect(onSelectCategory).toHaveBeenCalledWith(null);
+    });
+
+    it('keeps the chips reachable while the feed is loading', async () => {
+      const { view } = await renderView('loading', [], { categories: SECTIONS });
+
+      expect(view.getByLabelText('Locales')).toBeTruthy();
+    });
+
+    it('keeps the chips reachable on the error state', async () => {
+      const { view } = await renderView('error', [], { categories: SECTIONS });
+
+      expect(view.getByLabelText('Locales')).toBeTruthy();
+    });
   });
 
   it('lists article titles when the feed is ready', async () => {

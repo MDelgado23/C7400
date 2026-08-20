@@ -1,5 +1,6 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { fetchNews } from './api/newsApi';
+import { useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { fetchCategories, fetchNews } from './api/newsApi';
 import { NewsFeedView, resolveFeedStatus } from './NewsFeedView';
 import { nextSkip, trimToWindow } from './newsWindow';
 import type { NewsItem } from './newsMapping';
@@ -7,6 +8,9 @@ import type { NewsItem } from './newsMapping';
 interface NewsFeedScreenProps {
   onSelectArticle: (item: NewsItem) => void;
 }
+
+/** The sections barely change; asking for them again every hour is plenty. */
+const CATEGORIES_STALE_MS = 60 * 60_000;
 
 /**
  * Container for the Noticias tab.
@@ -20,6 +24,23 @@ interface NewsFeedScreenProps {
  * belong on screen (`trimToWindow`). Both are pure and tested apart from this.
  */
 export function NewsFeedScreen({ onSelectArticle }: NewsFeedScreenProps) {
+  /**
+   * The section being read, or null for the whole feed.
+   *
+   * Deliberately NOT remembered between sessions. Somebody opening a radio's
+   * app wants to know what is going on, not to resume the filter they set last
+   * Tuesday — and a feed silently missing most of its news, because of a choice
+   * nobody remembers making, reads as an app with nothing in it.
+   */
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+
+  // Never fails: an unreadable list means no chips, and the news is unaffected.
+  const { data: categories } = useQuery({
+    queryKey: ['news-categories'],
+    queryFn: fetchCategories,
+    staleTime: CATEGORIES_STALE_MS,
+  });
+
   const {
     data,
     isLoading,
@@ -30,8 +51,10 @@ export function NewsFeedScreen({ onSelectArticle }: NewsFeedScreenProps) {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['news'],
-    queryFn: ({ pageParam }) => fetchNews(pageParam),
+    // The section is part of the key, so each one keeps its own pages and
+    // switching back to one already read costs nothing.
+    queryKey: ['news', categoryId],
+    queryFn: ({ pageParam }) => fetchNews(pageParam, categoryId ?? undefined),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       nextSkip({ lastPage, pageCount: allPages.length, now: Date.now() }),
@@ -68,6 +91,9 @@ export function NewsFeedScreen({ onSelectArticle }: NewsFeedScreenProps) {
       }}
       loadingMore={isFetchingNextPage}
       reachedEnd={!hasNextPage && items.length > 0}
+      categories={categories ?? []}
+      selectedCategoryId={categoryId}
+      onSelectCategory={setCategoryId}
     />
   );
 }

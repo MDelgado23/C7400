@@ -92,11 +92,38 @@ simplemente no muestran botón. **Nunca dejes un campo vacío para "rellenar"**.
 }
 ```
 
-## Sobre los logos
+## Qué imagen pedirle al auspiciante
 
-Se ven sobre un fondo **azul muy oscuro**. La app les pone un recuadro claro
-detrás para que ninguno desaparezca, pero lo mejor sigue siendo un **PNG
-cuadrado**, más o menos del mismo tamaño para todos, así la grilla queda pareja.
+# 640 × 512 px
+
+**Relación 5:4, PNG con fondo transparente, máximo 150 KB.**
+
+Ese es el número que hay que exigir. Sale de una cuenta, no de un gusto: el
+recuadro más grande que la app llega a dibujar mide 384 × 299 px, y 640 × 512
+lo cubre con aire de sobra hasta en las pantallas más densas.
+
+Tres cosas que importan tanto como la resolución:
+
+**1. Que el logo ocupe todo el lienzo.** Si mandan un logo chiquito centrado con
+mucho aire alrededor, se va a ver chiquito — la app escala el lienzo entero,
+aire incluido. Que ocupe todo dejando apenas un **5% de margen** (unos 30 px),
+lo justo para no tocar las esquinas redondeadas.
+
+**2. Que no lo estiren.** La app nunca deforma: si el logo es más apaisado que
+el recuadro, usa todo el ancho y deja transparente arriba y abajo. Eso está
+bien y es lo esperado.
+
+**3. Fondo transparente.** Los logos se ven sobre un azul muy oscuro, y la app
+les pone un recuadro claro detrás para que ninguno desaparezca. Con fondo
+transparente eso funciona solo.
+
+> **Por qué 5:4 y no cuadrado:** el recuadro no es cuadrado, y además cambia un
+> poco de forma según el teléfono (la grilla acomoda las filas al alto de cada
+> pantalla). El ratio real va de 1.06 a 1.39; 5:4 es el punto medio, el que
+> menos espacio desperdicia en promedio. Ninguna medida única calza perfecto en
+> todos los dispositivos, y no hace falta que lo haga.
+
+Pedí el **mismo tamaño para todos**, así la grilla queda pareja.
 
 ## Antes de pushear
 

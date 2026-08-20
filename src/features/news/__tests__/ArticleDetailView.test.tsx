@@ -5,9 +5,12 @@ import {
   type DetailStatus,
   type ReadableArticle,
 } from '../ArticleDetailView';
-import { HERO_BAND_RATIO } from '../ArticleDetailView';
+import { HERO_BAND_RATIO } from '../photoBand';
 import { DEFAULT_ASPECT_RATIO } from '../photoAsset';
 import type { ArticleDetail } from '../newsMapping';
+
+/** A negative percentage, which is how the photo is slid up inside the band. */
+const NEGATIVE_PERCENT = /^-[0-9.]+%$/;
 
 const detail: ArticleDetail = {
   id: 'a',
@@ -137,26 +140,27 @@ describe('the photo band', () => {
     expect(StyleSheet.flatten(view.getByTestId('photo-band').props.style).overflow).toBe('hidden');
   });
 
-  // THE PART THAT MATTERS ON A PORTRAIT. Drawn at its own shape and pinned to
-  // the top of the band, a standing figure keeps its head and loses its feet.
-  // Centred — which is what an image does by default — it would keep the torso
-  // and cut the face off, on a section that is almost entirely photos of people.
-  it('keeps the top of a photo that is taller than the band', async () => {
+  // Where the window falls is `bandCrop`'s rule and is tested there. What
+  // matters HERE is that the view applies it: a tall photo is drawn at its own
+  // shape and slid up, rather than sitting where an image would sit by default.
+  it('draws a tall photo at its own shape and slides it up', async () => {
     const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.75 });
 
     const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
 
     expect(photo.aspectRatio).toBeCloseTo(0.75, 3);
+    expect(photo.marginTop).toMatch(NEGATIVE_PERCENT);
   });
 
-  // A photo wider than the band has nothing to gain from being pinned: it is
-  // cropped left and right, and centred is where the subject is.
+  // A wide photo is cropped left and right instead, where centred is exactly
+  // right, so there is no window to slide and nothing to move.
   it('lets a wide photo fill the band and crop at the sides', async () => {
     const { view } = await renderView('ready', { ...detail, imageAspectRatio: 3.2 });
 
     const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
 
     expect(photo.aspectRatio).toBeCloseTo(HERO_BAND_RATIO, 3);
+    expect(photo.marginTop).toBe('0%');
   });
 
   it('falls back to a common shape when the photo has none', async () => {

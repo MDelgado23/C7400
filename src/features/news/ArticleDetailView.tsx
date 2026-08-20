@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
-import { DEFAULT_ASPECT_RATIO } from './photoAsset';
+import { HERO_BAND_RATIO, bandCrop } from './photoBand';
 import type { ArticleDetail } from './newsMapping';
 
 export type DetailStatus = 'loading' | 'error' | 'ready';
@@ -25,24 +25,6 @@ interface ArticleDetailViewProps {
   /** Opens the photo on its own, uncropped and zoomable. */
   onOpenPhoto: (uri: string) => void;
 }
-
-/**
- * The shape of the photo band at the top of every article.
- *
- * A BAND RATHER THAN THE PHOTO'S OWN SHAPE, because the whole photo now has a
- * place of its own: tapping opens it uncropped and zoomable. Freed from having
- * to show everything, the article can have the thing a page wants — a lead
- * image the same size on every note, so the headline always lands in the same
- * spot and nothing jumps as the reader moves between them.
- *
- * 16:9 measured out best over a hundred of the newsroom's photos. Wider bands
- * crop hard (2:1 loses 28% of the average photo); taller ones barely crop less
- * — 3:2 saves two points — while eating 36% of the screen instead of 30%, which
- * is what pushes the deck and the save button below the fold. At 16:9 the
- * median photo still shows 85% of itself and a third of them show essentially
- * all of it.
- */
-export const HERO_BAND_RATIO = 16 / 9;
 
 /**
  * Presentational article detail. Renders the full body as native text
@@ -90,6 +72,8 @@ export function ArticleDetailView({
     );
   }
 
+  const crop = bandCrop(article.imageAspectRatio);
+
   return (
     <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -101,25 +85,21 @@ export function ArticleDetailView({
           >
             <View testID="photo-band" style={styles.band}>
               {/*
-                THE PHOTO IS PINNED TO THE TOP OF THE BAND, not centred, and on
-                a portrait that is the whole difference. Drawn at its own shape
-                and clipped from below, a standing figure keeps its head and
-                loses its feet; centred — which is what an image does by default
-                — it would keep the torso and cut the face off, in a section
-                that is almost entirely photographs of people.
-                A photo WIDER than the band has nothing to gain from being
-                pinned, so it takes the band's shape and crops at the sides,
-                where centred is exactly right.
+                THE WINDOW IS CENTRED A LITTLE ABOVE THE MIDDLE of the photo,
+                which is neither of the two obvious choices and better than
+                both: centred cuts the faces off a portrait, pinned to the top
+                fills the band with ceiling and throws the rest away. See
+                `bandCrop` for the arithmetic, and for what it does when there
+                is barely anything to crop.
               */}
               <Image
                 testID="article-photo"
                 source={{ uri: article.imageUrl }}
                 style={{
                   width: '100%',
-                  aspectRatio: Math.min(
-                    article.imageAspectRatio ?? DEFAULT_ASPECT_RATIO,
-                    HERO_BAND_RATIO,
-                  ),
+                  aspectRatio: crop.photoAspectRatio,
+                  // Slides the photo up so the window lands on the subject.
+                  marginTop: `${crop.shiftPercent}%`,
                 }}
                 resizeMode="cover"
               />

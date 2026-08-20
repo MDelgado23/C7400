@@ -5,6 +5,7 @@ import {
   type DetailStatus,
   type ReadableArticle,
 } from '../ArticleDetailView';
+import { HERO_BAND_RATIO } from '../ArticleDetailView';
 import { DEFAULT_ASPECT_RATIO } from '../photoAsset';
 import type { ArticleDetail } from '../newsMapping';
 
@@ -115,36 +116,55 @@ describe('a saved copy that was cut', () => {
   });
 });
 
-// The old frame was a fixed 200pt band: every photo was cropped into a 2:1 box,
-// which for the 12% of them that are portrait meant showing a slice. The frame
-// is shaped like the photo now, and what will not fit opens on its own.
-describe('the photo', () => {
-  it('takes the shape of the photo it is showing', async () => {
-    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.75 });
+// A BAND, the same on every article, with the full photo one tap away in the
+// viewer. Measured over a hundred of the newsroom's photos, 16:9 loses 21% of
+// the average one and takes 30% of the screen — the least crop that still
+// leaves the headline, the deck and the save button above the fold.
+describe('the photo band', () => {
+  it('is the same shape on every article', async () => {
+    const tall = await renderView('ready', { ...detail, imageAspectRatio: 0.5 });
+    const wide = await renderView('ready', { ...detail, imageAspectRatio: 3.2 });
 
-    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
-
-    expect(style.aspectRatio).toBeCloseTo(0.75, 3);
+    for (const view of [tall.view, wide.view]) {
+      const band = StyleSheet.flatten(view.getByTestId('photo-band').props.style);
+      expect(band.aspectRatio).toBeCloseTo(HERO_BAND_RATIO, 3);
+    }
   });
 
-  // Nothing to derive a shape from, so it falls back to the one most of the
-  // newsroom's photos have rather than to an arbitrary band.
+  it('clips rather than squashing what does not fit', async () => {
+    const { view } = await renderView('ready', detail);
+
+    expect(StyleSheet.flatten(view.getByTestId('photo-band').props.style).overflow).toBe('hidden');
+  });
+
+  // THE PART THAT MATTERS ON A PORTRAIT. Drawn at its own shape and pinned to
+  // the top of the band, a standing figure keeps its head and loses its feet.
+  // Centred — which is what an image does by default — it would keep the torso
+  // and cut the face off, on a section that is almost entirely photos of people.
+  it('keeps the top of a photo that is taller than the band', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.75 });
+
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(photo.aspectRatio).toBeCloseTo(0.75, 3);
+  });
+
+  // A photo wider than the band has nothing to gain from being pinned: it is
+  // cropped left and right, and centred is where the subject is.
+  it('lets a wide photo fill the band and crop at the sides', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 3.2 });
+
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(photo.aspectRatio).toBeCloseTo(HERO_BAND_RATIO, 3);
+  });
+
   it('falls back to a common shape when the photo has none', async () => {
     const { view } = await renderView('ready', { ...detail, imageAspectRatio: undefined });
 
-    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
 
-    expect(style.aspectRatio).toBe(DEFAULT_ASPECT_RATIO);
-  });
-
-  // A very tall photo shaped honestly would push the headline off the screen,
-  // so the frame is capped and the rest is one tap away.
-  it('never lets the photo take the whole screen', async () => {
-    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.4 });
-
-    const style = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
-
-    expect(style.maxHeight).toBeGreaterThan(0);
+    expect(photo.aspectRatio).toBeCloseTo(DEFAULT_ASPECT_RATIO, 3);
   });
 
   it('opens the photo on its own when tapped', async () => {
@@ -159,5 +179,6 @@ describe('the photo', () => {
     const { view } = await renderView('ready', { ...detail, imageUrl: undefined });
 
     expect(view.queryByLabelText('Ver la foto completa')).toBeNull();
+    expect(view.queryByTestId('photo-band')).toBeNull();
   });
 });

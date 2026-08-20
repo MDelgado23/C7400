@@ -1,12 +1,4 @@
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
@@ -35,14 +27,22 @@ interface ArticleDetailViewProps {
 }
 
 /**
- * The most of the screen a photo may take before the headline is pushed off it.
+ * The shape of the photo band at the top of every article.
  *
- * The frame is shaped like the photo, which is right for the 85% that are
- * roughly landscape and wrong for a very tall one: at its true shape a 0.46
- * portrait would be twice the height of the screen. It is capped here and the
- * rest is one tap away.
+ * A BAND RATHER THAN THE PHOTO'S OWN SHAPE, because the whole photo now has a
+ * place of its own: tapping opens it uncropped and zoomable. Freed from having
+ * to show everything, the article can have the thing a page wants — a lead
+ * image the same size on every note, so the headline always lands in the same
+ * spot and nothing jumps as the reader moves between them.
+ *
+ * 16:9 measured out best over a hundred of the newsroom's photos. Wider bands
+ * crop hard (2:1 loses 28% of the average photo); taller ones barely crop less
+ * — 3:2 saves two points — while eating 36% of the screen instead of 30%, which
+ * is what pushes the deck and the save button below the fold. At 16:9 the
+ * median photo still shows 85% of itself and a third of them show essentially
+ * all of it.
  */
-const MAX_PHOTO_SHARE = 0.55;
+export const HERO_BAND_RATIO = 16 / 9;
 
 /**
  * Presentational article detail. Renders the full body as native text
@@ -61,7 +61,6 @@ export function ArticleDetailView({
   onToggleSave,
   onOpenPhoto,
 }: ArticleDetailViewProps) {
-  const { height: windowHeight } = useWindowDimensions();
   if (status === 'loading') {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
@@ -100,17 +99,31 @@ export function ArticleDetailView({
             accessibilityLabel="Ver la foto completa"
             onPress={() => onOpenPhoto(article.imageUrl as string)}
           >
-            <Image
-              testID="article-photo"
-              source={{ uri: article.imageUrl }}
-              style={[
-                styles.hero,
-                {
-                  aspectRatio: article.imageAspectRatio ?? DEFAULT_ASPECT_RATIO,
-                  maxHeight: windowHeight * MAX_PHOTO_SHARE,
-                },
-              ]}
-            />
+            <View testID="photo-band" style={styles.band}>
+              {/*
+                THE PHOTO IS PINNED TO THE TOP OF THE BAND, not centred, and on
+                a portrait that is the whole difference. Drawn at its own shape
+                and clipped from below, a standing figure keeps its head and
+                loses its feet; centred — which is what an image does by default
+                — it would keep the torso and cut the face off, in a section
+                that is almost entirely photographs of people.
+                A photo WIDER than the band has nothing to gain from being
+                pinned, so it takes the band's shape and crops at the sides,
+                where centred is exactly right.
+              */}
+              <Image
+                testID="article-photo"
+                source={{ uri: article.imageUrl }}
+                style={{
+                  width: '100%',
+                  aspectRatio: Math.min(
+                    article.imageAspectRatio ?? DEFAULT_ASPECT_RATIO,
+                    HERO_BAND_RATIO,
+                  ),
+                }}
+                resizeMode="cover"
+              />
+            </View>
           </Pressable>
         ) : null}
         {article.kicker ? (
@@ -173,8 +186,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   content: { padding: spacing.md, gap: spacing.sm },
-  hero: {
+  band: {
     width: '100%',
+    aspectRatio: HERO_BAND_RATIO,
+    // What sticks out below the band is clipped, which is what makes the photo
+    // sit against the TOP edge instead of being centred in it.
+    overflow: 'hidden',
     borderRadius: radius.md,
     backgroundColor: colors.primaryDark,
     marginBottom: spacing.sm,

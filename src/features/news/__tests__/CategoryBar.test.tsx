@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { CategoryBar } from '../CategoryBar';
 import type { NewsCategory } from '../newsCategories';
@@ -77,5 +78,37 @@ describe('CategoryBar', () => {
     const { view } = await renderBar(null, []);
 
     expect(view.queryByText('Todas')).toBeNull();
+  });
+});
+
+/**
+ * A STYLE ASSERTION, ON PURPOSE, and the only kind available here.
+ *
+ * A horizontal ScrollView dropped into a flex column takes whatever height is
+ * going spare. On a section with two notes this bar swallowed a third of the
+ * screen and the chips stretched into tall capsules with it — a bug that walked
+ * straight past eight hundred passing tests, because the test renderer does no
+ * layout at all and never will.
+ *
+ * So the value itself is guarded. It is brittle by nature; if the bar is ever
+ * rebuilt some other way, delete this and check it on a device instead.
+ */
+describe('the bar does not take the height it is offered', () => {
+  it('refuses to grow', async () => {
+    const { view } = await renderBar();
+
+    const style = StyleSheet.flatten(view.getByTestId('category-bar').props.style);
+
+    expect(style.flexGrow).toBe(0);
+  });
+
+  it('does not stretch the chips if it is ever given room', async () => {
+    const { view } = await renderBar();
+
+    const content = StyleSheet.flatten(
+      view.getByTestId('category-bar').props.contentContainerStyle,
+    );
+
+    expect(content.alignItems).toBe('center');
   });
 });

@@ -39,9 +39,16 @@ export function CategoryBar({ categories, selectedId, onSelect }: CategoryBarPro
 
   return (
     <ScrollView
+      testID="category-bar"
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.bar}
+      // `flexGrow: 0` is load-bearing. A horizontal ScrollView dropped into a
+      // flex column takes whatever height is going spare, so on a section with
+      // only two notes this bar swallowed a third of the screen and the chips
+      // stretched into tall capsules with it. No test could have caught it:
+      // the test renderer does no layout at all.
+      style={styles.bar}
+      contentContainerStyle={styles.barContent}
     >
       {chips.map((chip) => {
         const active = chip.id === selectedId;
@@ -67,7 +74,16 @@ export function CategoryBar({ categories, selectedId, onSelect }: CategoryBarPro
 }
 
 const styles = StyleSheet.create({
-  bar: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
+  /** Height comes from the chips, never from what is left over. */
+  bar: { flexGrow: 0, flexShrink: 0 },
+  barContent: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    // Belt and braces: even if something above ever hands this bar more height,
+    // the chips stay their own size instead of stretching to fill it.
+    alignItems: 'center',
+  },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

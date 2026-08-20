@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Screen } from '../../ui/atoms/Screen';
+import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { CategoryBar } from './CategoryBar';
 import { publishedLabel } from './publishedLabel';
@@ -78,7 +78,7 @@ export function NewsFeedView({
   const now = Date.now();
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <CategoryBar
         categories={categories}
         selectedId={selectedCategoryId}

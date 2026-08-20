@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../ui/atoms/Screen';
+import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { Spinner } from '../../ui/atoms/Spinner';
 import { colors, radius, spacing } from '../../ui/theme';
@@ -49,7 +49,7 @@ export function ChangePasswordView({
   const feedback = errorMessage ?? noticeMessage;
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <AppText variant="body" muted>
           Vas a necesitar tu contraseña actual. Es lo que evita que alguien con tu celular

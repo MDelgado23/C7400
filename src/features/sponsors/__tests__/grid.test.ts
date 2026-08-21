@@ -3,6 +3,7 @@ import {
   GRID_CONTENT_PADDING,
   GRID_FALLBACK_ROWS,
   GRID_GAP,
+  LOGO_ASPECT,
   MIN_PLATE_HEIGHT,
   gridMetrics,
   gridSlots,
@@ -141,8 +142,42 @@ describe('gridMetrics', () => {
   });
 
   describe('the plate', () => {
-    // It spans the tile's full width and takes the height that is left, so a
-    // wide wordmark uses all of it instead of shrinking into a square.
+    /*
+     * THE PLATE CARRIES THE ARTWORK'S OWN SHAPE, and that is what keeps the
+     * logos from being padded.
+     *
+     * Sponsors hand over 640x512 files. Draw them with `contain` on a plate of
+     * any OTHER shape and the difference is filled with plate — which is how a
+     * black bar came to sit above and below every white logo in the light
+     * theme. Match the shape and there is nothing left to fill: `contain` and
+     * `cover` become the same thing, so no logo is padded and none is cropped.
+     */
+    it('has exactly the artwork aspect on a real phone', () => {
+      const { plateWidth, plateHeight } = gridMetrics(MOTO);
+
+      expect(plateWidth / plateHeight).toBeCloseTo(LOGO_ASPECT, 5);
+    });
+
+    it.each([
+      ['a short screen', { width: 432, height: 420 }],
+      ['a tall screen', { width: 432, height: 900 }],
+      ['a narrow phone', { width: 320, height: 693 }],
+      ['a wide phone', { width: 480, height: 693 }],
+    ])('holds the artwork aspect on %s', (_label, box) => {
+      const { plateWidth, plateHeight } = gridMetrics(box);
+
+      expect(plateWidth / plateHeight).toBeCloseTo(LOGO_ASPECT, 5);
+    });
+
+    // It still has to FIT: aspect is worthless if the plate spills out of the
+    // tile that holds it, or pushes the sponsor's name off the bottom.
+    it('stays inside the tile that holds it', () => {
+      const { tileWidth, tileHeight, plateWidth, plateHeight } = gridMetrics(MOTO);
+
+      expect(plateWidth).toBeLessThanOrEqual(tileWidth);
+      expect(plateHeight).toBeLessThan(tileHeight);
+    });
+
     it('is shorter than the tile is wide once the rows are stretched', () => {
       const { tileWidth, plateHeight } = gridMetrics(MOTO);
 
@@ -170,10 +205,11 @@ describe('gridMetrics', () => {
       ['negative', { width: -100, height: -100 }],
       ['NaN', { width: Number.NaN, height: Number.NaN }],
     ])('reports nothing to draw for a %s box', (_label, box) => {
-      const { tileWidth, tileHeight, plateHeight } = gridMetrics(box);
+      const { tileWidth, tileHeight, plateWidth, plateHeight } = gridMetrics(box);
 
       expect(tileWidth).toBe(0);
       expect(tileHeight).toBe(0);
+      expect(plateWidth).toBe(0);
       expect(plateHeight).toBe(0);
     });
 

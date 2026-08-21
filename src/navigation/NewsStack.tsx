@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NewsFeedScreen } from '../features/news/NewsFeedScreen';
 import { ArticleDetailScreen } from '../features/news/ArticleDetailScreen';
 import { SavedArticlesScreen } from '../features/favorites/SavedArticlesScreen';
-import { colors, spacing } from '../ui/theme';
+import { spacing, useColors, type Palette } from '../ui/theme';
 import { trackEvent } from '../core/observability/observability';
 import { EVENTS } from '../core/observability/events';
 
@@ -16,11 +16,19 @@ export type NewsStackParamList = {
 
 const Stack = createNativeStackNavigator<NewsStackParamList>();
 
-const screenOptions = {
-  headerStyle: { backgroundColor: colors.surface },
-  headerTintColor: colors.text,
-  contentStyle: { backgroundColor: colors.background },
-} as const;
+/**
+ * Header and page chrome, built from the ACTIVE palette.
+ *
+ * A function rather than the constant it used to be. The constant froze the
+ * navigator's colours at import time, so a stack mounted once would keep a dark
+ * header sitting over a light app for the rest of the session.
+ */
+const stackOptions = (colors: Palette) =>
+  ({
+    headerStyle: { backgroundColor: colors.surface },
+    headerTintColor: colors.text,
+    contentStyle: { backgroundColor: colors.background },
+  }) as const;
 
 /**
  * Noticias tab: feed → article detail, plus the saved list.
@@ -30,8 +38,10 @@ const screenOptions = {
  * radio. The bookmark in the header is the way in.
  */
 export function NewsStack() {
+  const colors = useColors();
+
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator screenOptions={stackOptions(colors)}>
       <Stack.Screen
         name="NewsFeed"
         options={({ navigation }) => ({

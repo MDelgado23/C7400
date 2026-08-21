@@ -2,7 +2,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } fro
 import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import { HERO_BAND_RATIO, bandCrop } from './photoBand';
 import type { ArticleDetail } from './newsMapping';
 
@@ -43,6 +43,8 @@ export function ArticleDetailView({
   onToggleSave,
   onOpenPhoto,
 }: ArticleDetailViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   if (status === 'loading') {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
@@ -65,7 +67,9 @@ export function ArticleDetailView({
             style={styles.retry}
             hitSlop={12}
           >
-            <AppText variant="subtitle">Reintentar</AppText>
+            <AppText variant="subtitle" style={styles.onBrand}>
+              Reintentar
+            </AppText>
           </Pressable>
         </View>
       </Screen>
@@ -131,9 +135,9 @@ export function ArticleDetailView({
           <Ionicons
             name={isSaved ? 'bookmark' : 'bookmark-outline'}
             size={18}
-            color={isSaved ? colors.text : colors.primary}
+            color={isSaved ? colors.onPrimary : colors.primary}
           />
-          <AppText variant="caption" style={isSaved ? undefined : styles.saveLabel}>
+          <AppText variant="caption" style={isSaved ? styles.onBrand : styles.saveLabel}>
             {isSaved ? 'Guardada' : 'Guardar'}
           </AppText>
         </Pressable>
@@ -156,40 +160,46 @@ export function ArticleDetailView({
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  errorText: { color: colors.error },
-  retry: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-  },
-  content: { padding: spacing.md, gap: spacing.sm },
-  band: {
-    width: '100%',
-    aspectRatio: HERO_BAND_RATIO,
-    // What sticks out below the band is clipped, which is what makes the photo
-    // sit against the TOP edge instead of being centred in it.
-    overflow: 'hidden',
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryDark,
-    marginBottom: spacing.sm,
-  },
-  save: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-    marginVertical: spacing.xs,
-  },
-  saveActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  saveLabel: { color: colors.primary },
-  truncated: { fontStyle: 'italic' },
-  paragraph: { lineHeight: 22 },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+    errorText: { color: colors.error },
+    retry: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primary,
+    },
+    content: { padding: spacing.md, gap: spacing.sm },
+    band: {
+      width: '100%',
+      aspectRatio: HERO_BAND_RATIO,
+      // What sticks out below the band is clipped, which is what makes the photo
+      // sit against the TOP edge instead of being centred in it.
+      overflow: 'hidden',
+      borderRadius: radius.md,
+      backgroundColor: colors.primaryDark,
+      marginBottom: spacing.sm,
+    },
+    save: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
+      marginVertical: spacing.xs,
+    },
+    saveActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    saveLabel: { color: colors.primary },
+    truncated: { fontStyle: 'italic' },
+    paragraph: { lineHeight: 22 },
+  });

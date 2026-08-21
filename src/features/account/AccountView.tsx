@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import type { AccountItem, AccountItemId, AccountSection } from './accountMenu';
 
 interface SessionSummary {
@@ -22,6 +22,8 @@ interface AccountViewProps {
 
 /** One settings row. Inert when its destination does not exist yet. */
 function Row({ item, onPress }: { item: AccountItem; onPress: (id: AccountItemId) => void }) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -68,6 +70,8 @@ export function AccountView({
   onSignUp,
   onSignOut,
 }: AccountViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   if (session === null) {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
@@ -97,7 +101,9 @@ export function AccountView({
               onPress={onSignUp}
               style={styles.primaryDoor}
             >
-              <AppText variant="subtitle">Crear cuenta</AppText>
+              <AppText variant="subtitle" style={styles.onBrand}>
+                Crear cuenta
+              </AppText>
             </Pressable>
             {/* Its own door, never behind the other one: someone who reinstalled
                 the app already has an account and came here to use it. */}
@@ -161,63 +167,69 @@ export function AccountView({
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  pitchTitle: { textAlign: 'center' },
-  pitchBody: { textAlign: 'center', paddingHorizontal: spacing.lg },
-  doors: { alignSelf: 'stretch', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.md },
-  primaryDoor: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  secondaryDoor: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-  },
-  secondaryDoorLabel: { color: colors.primary },
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+    pitchTitle: { textAlign: 'center' },
+    pitchBody: { textAlign: 'center', paddingHorizontal: spacing.lg },
+    doors: { alignSelf: 'stretch', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.md },
+    primaryDoor: {
+      backgroundColor: colors.primary,
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+    },
+    secondaryDoor: {
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
+    },
+    secondaryDoorLabel: { color: colors.primary },
 
-  content: { paddingVertical: spacing.md, gap: spacing.lg },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  identityText: { flex: 1 },
+    content: { paddingVertical: spacing.md, gap: spacing.lg },
+    identity: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+    },
+    identityText: { flex: 1 },
 
-  section: { gap: spacing.xs },
-  // Uppercased in CSS, not in JS: the accessible name stays 'Seguridad' rather
-  // than becoming something a screen reader may spell out letter by letter.
-  sectionTitle: { paddingHorizontal: spacing.md, letterSpacing: 1, textTransform: 'uppercase' },
-  rows: {
-    backgroundColor: colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  rowInert: { opacity: 0.5 },
-  rowLabel: { flex: 1 },
+    section: { gap: spacing.xs },
+    // Uppercased in CSS, not in JS: the accessible name stays 'Seguridad' rather
+    // than becoming something a screen reader may spell out letter by letter.
+    sectionTitle: { paddingHorizontal: spacing.md, letterSpacing: 1, textTransform: 'uppercase' },
+    rows: {
+      backgroundColor: colors.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+    },
+    rowInert: { opacity: 0.5 },
+    rowLabel: { flex: 1 },
 
-  signOut: {
-    marginTop: spacing.md,
-    marginHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.error,
-  },
-  signOutLabel: { color: colors.error },
-});
+    signOut: {
+      marginTop: spacing.md,
+      marginHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.error,
+    },
+    signOutLabel: { color: colors.error },
+  });

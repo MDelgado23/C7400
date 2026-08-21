@@ -14,7 +14,7 @@ async function renderView(
   const view = await render(
     <AccountView
       session={{ isAnonymous: false, email: 'martin@gmail.com' }}
-      sections={accountSections()}
+      sections={accountSections('dark')}
       {...spies}
       {...props}
     />,
@@ -99,15 +99,22 @@ describe('with an account', () => {
     expect(onSelectItem).toHaveBeenCalledWith('change-password');
   });
 
-  it('does not pretend an unbuilt row works', async () => {
-    // Rendered, so the shape of what is coming is visible, but inert and
-    // labelled as such rather than swallowing taps in silence.
+  it('opens the theme row, which is built now', async () => {
+    // It used to render inert and say "Próximamente". There is a picker behind
+    // it now, so the row opens like any other.
     const { onSelectItem, view } = await renderView();
 
     await fireEvent.press(view.getByLabelText('Tema'));
 
-    expect(onSelectItem).not.toHaveBeenCalled();
-    expect(view.getAllByText('Próximamente').length).toBeGreaterThan(0);
+    expect(onSelectItem).toHaveBeenCalledWith('theme');
+  });
+
+  it('promises nothing that is not there', async () => {
+    // Every row leads somewhere, so nothing should be labelled as pending. The
+    // inert rendering stays in the component for the next row that needs it.
+    const { view } = await renderView();
+
+    expect(view.queryByText('Próximamente')).toBeNull();
   });
 
   it('shows a row its current value', async () => {

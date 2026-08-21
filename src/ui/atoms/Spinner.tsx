@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
-import { colors } from '../theme';
+import { useColors } from '../theme';
 
 interface SpinnerProps {
   /** Outer diameter in px. */
   size?: number;
   /** Ring stroke width. */
   thickness?: number;
-  /** Colour of the spinning arc. */
+  /** Colour of the spinning arc. Defaults to the active palette's text colour. */
   color?: string;
-  /** Colour of the rest of the ring (the faint track). */
+  /** Colour of the rest of the ring (the faint track). Defaults per palette. */
   trackColor?: string;
   /** For queries in tests; the visible label lives on the containing control. */
   testID?: string;
@@ -21,13 +21,14 @@ interface SpinnerProps {
  * lives on the control that hosts it). Uses the native-driver Animated loop so
  * it never touches the JS thread while spinning.
  */
-export function Spinner({
-  size = 28,
-  thickness = 3,
-  color = colors.text,
-  trackColor = 'rgba(255, 255, 255, 0.25)',
-  testID,
-}: SpinnerProps) {
+export function Spinner({ size = 28, thickness = 3, color, trackColor, testID }: SpinnerProps) {
+  // Resolved in the body rather than as default parameters: a default parameter
+  // is evaluated where the function is DECLARED, and a hook cannot be called
+  // from there. That is also what used to pin the track to a hardcoded white —
+  // invisible on a light background.
+  const colors = useColors();
+  const arc = color ?? colors.text;
+  const track = trackColor ?? colors.spinnerTrack;
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -58,8 +59,8 @@ export function Spinner({
         height: size,
         borderRadius: size / 2,
         borderWidth: thickness,
-        borderColor: trackColor,
-        borderTopColor: color,
+        borderColor: track,
+        borderTopColor: arc,
         transform: [{ rotate }],
       }}
     />

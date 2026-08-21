@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   NavigationContainer,
   DarkTheme,
+  DefaultTheme,
   useNavigationContainerRef,
 } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -14,22 +15,40 @@ import { accountTabLabel } from '../features/account/accountMenu';
 import { useAuthUser } from '../features/auth/useAuthUser';
 import { MiniPlayer } from '../ui/organisms/MiniPlayer';
 import { shouldShowMiniPlayer, FULL_PLAYER_ROUTE } from './miniPlayerVisibility';
-import { colors } from '../ui/theme';
+import {
+  useColors,
+  useThemeScheme,
+  type ColorScheme,
+  type Palette,
+} from '../ui/theme';
 import { trackScreen } from '../core/observability/observability';
 
 const Tab = createBottomTabNavigator();
 
-const navTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.background,
-    card: colors.surface,
-    text: colors.text,
-    primary: colors.primary,
-    border: colors.border,
-  },
-};
+/**
+ * React Navigation's own theme object, kept in step with ours.
+ *
+ * Built per scheme rather than declared once, and THE BASE MATTERS AS MUCH AS
+ * THE OVERRIDES. `DarkTheme` carries `dark: true`, which is what React
+ * Navigation hands to everything we do not colour ourselves — the backdrop a
+ * push/pop transition reveals, the default header tint, the modal scrim. Leaving
+ * it underneath a light palette shows up as a dark flash between screens, on
+ * every single navigation, and no amount of overriding `colors` fixes it.
+ */
+function navigationTheme(scheme: ColorScheme, colors: Palette) {
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      primary: colors.primary,
+      border: colors.border,
+    },
+  };
+}
 
 /**
  * Root shell: bottom tabs (Radio · Noticias · …) with the persistent MiniPlayer
@@ -51,6 +70,11 @@ export function RootNavigator() {
   // "Entrar", a registered one is shown their "Cuenta".
   const user = useAuthUser();
   const isSignedIn = user !== null && !user.isAnonymous;
+  const scheme = useThemeScheme();
+  const colors = useColors();
+  // Memoised because NavigationContainer treats a new `theme` identity as a
+  // reason to rebuild, and this component re-renders on every route change.
+  const navTheme = useMemo(() => navigationTheme(scheme, colors), [scheme, colors]);
 
   const reportCurrentScreen = () => {
     const current = navigationRef.getCurrentRoute()?.name;

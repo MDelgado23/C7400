@@ -2,7 +2,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../ui/atoms/AppText';
 import { Spinner } from '../../ui/atoms/Spinner';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import { copyFor, type AuthMode } from './authSheetState';
 
 interface AuthSheetViewProps {
@@ -52,6 +52,8 @@ export function AuthSheetView({
   revealed,
   onToggleReveal,
 }: AuthSheetViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   const copy = copyFor(mode);
   const isIntro = mode === 'intro';
   // The label doubles as the accessible name AND the disabled state: pressing it
@@ -156,9 +158,11 @@ export function AuthSheetView({
         style={[styles.primary, busy && styles.primaryBusy]}
       >
         {busy ? (
-          <Spinner size={20} thickness={2} color={colors.text} />
+          <Spinner size={20} thickness={2} color={colors.onPrimary} />
         ) : (
-          <AppText variant="subtitle">{copy.submitLabel}</AppText>
+          <AppText variant="subtitle" style={styles.onBrand}>
+            {copy.submitLabel}
+          </AppText>
         )}
       </Pressable>
 
@@ -202,69 +206,75 @@ export function AuthSheetView({
   );
 }
 
-const styles = StyleSheet.create({
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    // Caps the sheet on a short screen with the keyboard up: past this it
-    // scrolls instead of pushing its own header off the top.
-    maxHeight: '90%',
-    flexGrow: 0,
-  },
-  sheetContent: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.border,
-    marginBottom: spacing.sm,
-  },
-  body: { marginBottom: spacing.sm },
-  input: {
-    backgroundColor: colors.background,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + spacing.xs,
-    color: colors.text,
-    fontSize: 16,
-  },
-  passwordField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingRight: spacing.xs,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + spacing.xs,
-    color: colors.text,
-    fontSize: 16,
-  },
-  reveal: { padding: spacing.sm },
-  feedback: { marginTop: spacing.xs },
-  error: { color: colors.error },
-  notice: { color: colors.textMuted },
-  primary: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    minHeight: 52,
-    justifyContent: 'center',
-  },
-  primaryBusy: { backgroundColor: colors.primaryDark },
-  secondary: { alignItems: 'center', paddingVertical: spacing.sm },
-  link: { color: colors.primary },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      // Caps the sheet on a short screen with the keyboard up: past this it
+      // scrolls instead of pushing its own header off the top.
+      maxHeight: '90%',
+      flexGrow: 0,
+    },
+    sheetContent: {
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    grabber: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: radius.pill,
+      backgroundColor: colors.border,
+      marginBottom: spacing.sm,
+    },
+    body: { marginBottom: spacing.sm },
+    input: {
+      backgroundColor: colors.background,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + spacing.xs,
+      color: colors.text,
+      fontSize: 16,
+    },
+    passwordField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingRight: spacing.xs,
+    },
+    passwordInput: {
+      flex: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + spacing.xs,
+      color: colors.text,
+      fontSize: 16,
+    },
+    reveal: { padding: spacing.sm },
+    feedback: { marginTop: spacing.xs },
+    error: { color: colors.error },
+    notice: { color: colors.textMuted },
+    primary: {
+      backgroundColor: colors.primary,
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      marginTop: spacing.sm,
+      minHeight: 52,
+      justifyContent: 'center',
+    },
+    primaryBusy: { backgroundColor: colors.primaryDark },
+    secondary: { alignItems: 'center', paddingVertical: spacing.sm },
+    link: { color: colors.primary },
+  });

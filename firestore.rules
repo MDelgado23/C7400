@@ -27,10 +27,65 @@ service cloud.firestore {
         && isWellFormedArticle();
     }
 
+    // A user's app settings — one document, `preferences`, holding the theme
+    // and whatever joins it later. Same shape and same single comparison as the
+    // favourites above: the uid is IN THE PATH.
+    //
+    // `request.auth != null` covers anonymous sessions deliberately, for the
+    // same reason as favourites: an anonymous user has a real uid, and the
+    // theme they picked before registering is what gets carried onto the
+    // account the day they do.
+    //
+    // NO DELETE. Nothing in the app deletes a settings document, so the rule
+    // does not permit it — a permission granted for an operation that does not
+    // exist can only ever be used by a bug or by somebody who should not have
+    // it.
+    match /users/{userId}/settings/{document} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && isWellFormedSettings();
+    }
+
     // Everything else is denied. Rules do not cascade: a path with no `match`
     // has no access, which is exactly what we want for anything added later
     // before someone has thought about who should see it.
   }
+}
+
+// A settings document has to look like one.
+//
+// Same purpose as the article check below: not a defence against a hostile user
+// — they can only ever spoil their own settings — but against a BUG in our app
+// writing a value the reader cannot make sense of, and against a runaway write
+// burning the daily quota for everyone.
+//
+// The theme is checked against the EXACT three values the app understands. It is
+// a closed vocabulary, so there is no reason to accept anything else, and a
+// rejected write here is a bug caught at the boundary rather than a preference
+// that silently reads back as "nothing chosen" on every device forever.
+//
+// It is optional, though — a document that carries only some other KNOWN
+// setting is perfectly valid, and requiring the theme would block a write that
+// only touches a sibling field.
+//
+// `hasOnly` is what actually bounds this document, and it is the reason there is
+// no size check here. Firestore rules have NO byte-size primitive: the
+// byte-valued `request.resource.size` belongs to Cloud STORAGE. In Firestore
+// `request.resource.size()` is the key count of the Resource WRAPPER — measured
+// against the emulator, it returns 3 for every document ever written, so
+// `< 10000` was a comparison that could not fail. A closed vocabulary does the
+// job properly instead: the only permitted key is `theme` and its only permitted
+// values are three short strings, so the whole document is provably tiny.
+//
+// The cost is real and deliberate: ADD A SETTING HERE BEFORE THE APP WRITES IT,
+// or the write is rejected. Widening what a client may store is exactly the kind
+// of change that should be a conscious act rather than something that slips in.
+function isWellFormedSettings() {
+  let settings = request.resource.data;
+  return settings.keys().hasOnly(['theme'])
+    && (!('theme' in settings) || settings.theme in ['system', 'light', 'dark']);
 }
 
 // A stored article has to look like one.
@@ -39,13 +94,27 @@ service cloud.firestore {
 // and can only ever spoil its own list. It is a defence against a BUG in our
 // app writing malformed rows that then break the list for the person who owns
 // it, and against a runaway write burning the daily quota for everyone.
+// The caps below are sized from the app's OWN budget, not guessed. `fitBody`
+// trims the stored body at MAX_BODY_CHARS = 200_000 on paragraph boundaries, so
+// a legitimately long article can carry thousands of paragraphs — a tighter cap
+// would reject saves that are working correctly today. These sit far above
+// anything real and only ever fire on a runaway write.
+//
+// There is deliberately NO total-size check. Firestore rules cannot measure
+// bytes at all (see isWellFormedSettings above), and they do not need to:
+// Firestore rejects any document over 1 MiB server-side on its own, rules or no
+// rules. The previous `request.resource.size() < 500000` here measured the
+// Resource wrapper's key count — a constant 3 — so it never rejected anything.
 function isWellFormedArticle() {
   let article = request.resource.data;
   return article.id is string
     && article.title is string
     && article.savedAt is number
     && article.paragraphs is list
-    // 1 MiB is Firestore's hard document limit; staying well under it means a
-    // malformed write is rejected here instead of failing mid-sync.
-    && request.resource.size() < 500000;
+    // A headline runs to a couple of hundred characters. This catches the
+    // mapping bug where a whole body lands in `title`.
+    && article.title.size() < 1000
+    // 200_000 characters of body cannot reach this even at 20 characters a
+    // paragraph, so a real article never trips it.
+    && article.paragraphs.size() < 20000;
 }

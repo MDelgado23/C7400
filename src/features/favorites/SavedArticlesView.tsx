@@ -2,7 +2,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, View } from 
 import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import type { SavedArticle } from '../../core/favorites/savedArticle';
 import type { AccountPrompt, AccountIntent } from './accountPrompt';
 
@@ -50,6 +50,7 @@ function AccountRow({
   prompt: AccountPrompt;
   onPress: (intent: AccountIntent) => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.account}>
       <AppText variant="caption" muted style={styles.accountMessage}>
@@ -88,6 +89,8 @@ export function SavedArticlesView({
   account,
   onPressAccount,
 }: SavedArticlesViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   if (status === 'loading') {
     return (
       <Screen edges={BELOW_HEADER_EDGES}>
@@ -163,45 +166,46 @@ export function SavedArticlesView({
 
 const THUMB = 72;
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  emptyText: { textAlign: 'center', paddingHorizontal: spacing.lg },
-  list: { padding: spacing.md, gap: spacing.md },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-  },
-  thumb: {
-    width: THUMB,
-    height: THUMB,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primaryDark,
-  },
-  cardBody: { flex: 1, justifyContent: 'center', gap: spacing.xs },
-  remove: { paddingHorizontal: spacing.xs },
-  account: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  accountMessage: { flex: 1 },
-  accountActions: { flexDirection: 'row', gap: spacing.xs },
-  accountAction: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-  },
-  accountActionLabel: { color: colors.primary },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+    emptyText: { textAlign: 'center', paddingHorizontal: spacing.lg },
+    list: { padding: spacing.md, gap: spacing.md },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+    },
+    thumb: {
+      width: THUMB,
+      height: THUMB,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primaryDark,
+    },
+    cardBody: { flex: 1, justifyContent: 'center', gap: spacing.xs },
+    remove: { paddingHorizontal: spacing.xs },
+    account: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: colors.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    accountMessage: { flex: 1 },
+    accountActions: { flexDirection: 'row', gap: spacing.xs },
+    accountAction: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: radius.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
+    },
+    accountActionLabel: { color: colors.primary },
+  });

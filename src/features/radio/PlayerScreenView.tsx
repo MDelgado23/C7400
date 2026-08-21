@@ -4,7 +4,7 @@ import { Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { Spinner } from '../../ui/atoms/Spinner';
 import { BackgroundPlaybackNotice } from '../../ui/organisms/BackgroundPlaybackNotice';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
 
 /** Station logo, shown as the player artwork when no program image is available. */
@@ -35,6 +35,8 @@ export function PlayerScreenView({
   backgroundNoticeVisible = false,
   onEnableBackground,
 }: PlayerScreenViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   const willPause = toggleIntent(state) === 'pause';
   const isBuffering = state === 'buffering';
   const controlLabel = isBuffering ? 'Cargando' : willPause ? 'Pausar' : 'Reproducir';
@@ -78,7 +80,9 @@ export function PlayerScreenView({
               style={styles.retryButton}
               hitSlop={12}
             >
-              <AppText variant="subtitle">Reintentar</AppText>
+              <AppText variant="subtitle" style={styles.onBrand}>
+              Reintentar
+            </AppText>
             </Pressable>
           </View>
         ) : (
@@ -91,12 +95,12 @@ export function PlayerScreenView({
               hitSlop={12}
             >
               {isBuffering ? (
-                <Spinner size={40} color={colors.text} />
+                <Spinner size={40} color={colors.onPrimary} />
               ) : (
                 <Ionicons
                   name={willPause ? 'pause' : 'play'}
                   size={40}
-                  color={colors.text}
+                  color={colors.onPrimary}
                   style={willPause ? undefined : styles.playIconOffset}
                 />
               )}
@@ -110,44 +114,53 @@ export function PlayerScreenView({
 
 const ARTWORK_SIZE = 220;
 
-const styles = StyleSheet.create({
-  notice: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  artwork: {
-    width: ARTWORK_SIZE,
-    height: ARTWORK_SIZE,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primaryDark,
-  },
-  title: { textAlign: 'center' },
-  block: {
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.lg,
-  },
-  errorText: { color: colors.error },
-  playButton: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // The play triangle reads as left-heavy in a circle; nudge it to optical centre.
-  playIconOffset: { marginLeft: 4 },
-  retryButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-  },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    notice: {
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+    },
+    content: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.md,
+    },
+    artwork: {
+      width: ARTWORK_SIZE,
+      height: ARTWORK_SIZE,
+      borderRadius: radius.lg,
+      backgroundColor: colors.primaryDark,
+    },
+    title: { textAlign: 'center' },
+    block: {
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.lg,
+    },
+    errorText: { color: colors.error },
+    // Filled with `control`, the same token the mini bar's glyph uses. The icon
+    // over it stays `onPrimary`, which is what keeps it readable whatever
+    // `control` is set to in a given palette.
+    playButton: {
+      width: 88,
+      height: 88,
+      borderRadius: radius.pill,
+      backgroundColor: colors.control,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // The play triangle reads as left-heavy in a circle; nudge it to optical centre.
+    playIconOffset: { marginLeft: 4 },
+    retryButton: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primary,
+    },
+  });

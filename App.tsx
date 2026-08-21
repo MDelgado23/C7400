@@ -9,6 +9,7 @@ import { loadRemoteConfig } from './src/core/config/remoteConfig';
 import { initAudio, play, teardownAudio } from './src/core/audio/audioService';
 import { usePlayerStore } from './src/core/store/playerStore';
 import { shouldRevealApp } from './src/core/store/appReadiness';
+import { useThemeHydrated, useThemeScheme } from './src/ui/theme';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,11 @@ export default function App() {
   const [animationDone, setAnimationDone] = useState(false);
   // App revealed → swap the splash for the navigator.
   const [ready, setReady] = useState(false);
+  // The saved theme has been read off the device, and which palette it resolved
+  // to. Both are needed here: one gates the reveal, the other picks the status
+  // bar icons.
+  const themeHydrated = useThemeHydrated();
+  const scheme = useThemeScheme();
 
   useEffect(() => {
     // Boot the audio engine, then start playback IMMEDIATELY so the stream buffers
@@ -49,8 +55,8 @@ export default function App() {
   // Reveal once the animation has played AND the stream is truly playing (or has
   // errored). Until then the splash covers the buffering.
   useEffect(() => {
-    if (shouldRevealApp(animationDone, playerState)) setReady(true);
-  }, [animationDone, playerState]);
+    if (shouldRevealApp(animationDone, playerState, themeHydrated)) setReady(true);
+  }, [animationDone, playerState, themeHydrated]);
 
   // Safety net: never keep the splash up longer than the hard cap.
   useEffect(() => {
@@ -64,8 +70,15 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          {/* Dark icons over the white intro; light icons over the dark app. */}
-          <StatusBar style={ready ? 'light' : 'dark'} />
+          {/*
+            The status bar carries the icons the OS draws over OUR background,
+            so it has to be told which way to go. Dark icons over the white
+            intro — that stage is white by design in both themes. Once the app
+            is revealed it follows the active palette: light icons on the dark
+            theme, dark icons on the light one. Getting this wrong is how a
+            light theme ships with an invisible clock and battery.
+          */}
+          <StatusBar style={!ready || scheme === 'light' ? 'dark' : 'light'} />
           {ready ? (
             <RootNavigator />
           ) : (

@@ -11,7 +11,7 @@ import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { CategoryBar } from './CategoryBar';
 import { publishedLabel } from './publishedLabel';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import type { NewsCategory } from './newsCategories';
 import type { NewsItem } from './newsMapping';
 
@@ -72,6 +72,8 @@ export function NewsFeedView({
   selectedCategoryId,
   onSelectCategory,
 }: NewsFeedViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   // Read once per render rather than per card, so every time on screen is
   // measured from the same instant and two notes a second apart cannot end up
   // labelled out of order.
@@ -99,7 +101,9 @@ export function NewsFeedView({
             style={styles.retry}
             hitSlop={12}
           >
-            <AppText variant="subtitle">Reintentar</AppText>
+            <AppText variant="subtitle" style={styles.onBrand}>
+              Reintentar
+            </AppText>
           </Pressable>
         </View>
       ) : status === 'empty' ? (
@@ -198,34 +202,40 @@ export function NewsFeedView({
 
 const THUMB = 72;
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  errorText: { color: colors.error },
-  emptyText: { textAlign: 'center', paddingHorizontal: spacing.lg },
-  retry: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-  },
-  list: { padding: spacing.md, gap: spacing.md },
-  card: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-  },
-  thumb: {
-    width: THUMB,
-    height: THUMB,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primaryDark,
-  },
-  cardBody: { flex: 1, justifyContent: 'center', gap: spacing.xs },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Shrinks so a long section name never pushes the time off the card.
-  kicker: { flexShrink: 1 },
-  footer: { paddingVertical: spacing.lg },
-  footerText: { textAlign: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.md },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+    errorText: { color: colors.error },
+    emptyText: { textAlign: 'center', paddingHorizontal: spacing.lg },
+    retry: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primary,
+    },
+    list: { padding: spacing.md, gap: spacing.md },
+    card: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+    },
+    thumb: {
+      width: THUMB,
+      height: THUMB,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primaryDark,
+    },
+    cardBody: { flex: 1, justifyContent: 'center', gap: spacing.xs },
+    meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    // Shrinks so a long section name never pushes the time off the card.
+    kicker: { flexShrink: 1 },
+    footer: { paddingVertical: spacing.lg },
+    footerText: { textAlign: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.md },
+  });

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchArticle } from './api/newsApi';
 import { ArticleDetailView, type DetailStatus } from './ArticleDetailView';
+import { PhotoViewer } from './PhotoViewer';
 import { AuthSheet } from '../auth/AuthSheet';
 import { useAuthUser } from '../auth/useAuthUser';
 import { useSavedArticle } from '../favorites/useFavorites';
@@ -29,6 +30,13 @@ export function ArticleDetailScreen({ articleId }: ArticleDetailScreenProps) {
   const user = useAuthUser();
   const savedCopy = useSavedArticle(articleId);
   const [authVisible, setAuthVisible] = useState(false);
+  /**
+   * The photo being looked at on its own, or null.
+   *
+   * Held here rather than inside the view for the same reason the auth sheet is:
+   * a modal that outlives a re-render belongs above the thing it covers.
+   */
+  const [photo, setPhoto] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['article', articleId],
@@ -74,7 +82,9 @@ export function ArticleDetailScreen({ articleId }: ArticleDetailScreenProps) {
         }}
         isSaved={savedCopy !== undefined}
         onToggleSave={handleToggleSave}
+        onOpenPhoto={setPhoto}
       />
+      <PhotoViewer uri={photo} onClose={() => setPhoto(null)} />
       <AuthSheet visible={authVisible} onClose={() => setAuthVisible(false)} />
     </>
   );

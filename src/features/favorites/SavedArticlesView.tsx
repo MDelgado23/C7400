@@ -1,6 +1,6 @@
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../ui/atoms/Screen';
+import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
 import type { SavedArticle } from '../../core/favorites/savedArticle';
@@ -90,7 +90,7 @@ export function SavedArticlesView({
 }: SavedArticlesViewProps) {
   if (status === 'loading') {
     return (
-      <Screen>
+      <Screen edges={BELOW_HEADER_EDGES}>
         <View style={styles.center}>
           <ActivityIndicator accessibilityLabel="Cargando guardadas" color={colors.text} />
         </View>
@@ -100,7 +100,7 @@ export function SavedArticlesView({
 
   if (status === 'empty') {
     return (
-      <Screen padded={false}>
+      <Screen padded={false} edges={BELOW_HEADER_EDGES}>
         {account ? <AccountRow prompt={account} onPress={onPressAccount} /> : null}
         <View style={styles.center}>
           <Ionicons name="bookmark-outline" size={48} color={colors.textMuted} />
@@ -115,7 +115,7 @@ export function SavedArticlesView({
   }
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       {account ? <AccountRow prompt={account} onPress={onPressAccount} /> : null}
       <FlatList
         data={articles}

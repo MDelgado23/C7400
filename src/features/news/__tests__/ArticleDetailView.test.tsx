@@ -1,10 +1,16 @@
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import {
   ArticleDetailView,
   type DetailStatus,
   type ReadableArticle,
 } from '../ArticleDetailView';
+import { HERO_BAND_RATIO } from '../photoBand';
+import { DEFAULT_ASPECT_RATIO } from '../photoAsset';
 import type { ArticleDetail } from '../newsMapping';
+
+/** A negative percentage, which is how the photo is slid up inside the band. */
+const NEGATIVE_PERCENT = /^-[0-9.]+%$/;
 
 const detail: ArticleDetail = {
   id: 'a',
@@ -24,17 +30,20 @@ async function renderView(
 ) {
   const onRetry = jest.fn();
   const onToggleSave = jest.fn();
-  const view = await render(
-    <ArticleDetailView
-      status={status}
-      article={article}
-      onRetry={onRetry}
-      isSaved={false}
-      onToggleSave={onToggleSave}
-      {...extra}
-    />,
-  );
-  return { onRetry, onToggleSave, view };
+  const onOpenPhoto = jest.fn();
+  // Built as an object so `extra` can override any of these without the spread
+  // making the required props look optional to the type checker.
+  const props = {
+    status,
+    article,
+    onRetry,
+    isSaved: false,
+    onToggleSave,
+    onOpenPhoto,
+    ...extra,
+  } as React.ComponentProps<typeof ArticleDetailView>;
+  const view = await render(<ArticleDetailView {...props} />);
+  return { onRetry, onToggleSave, onOpenPhoto, view };
 }
 
 describe('ArticleDetailView', () => {
@@ -107,5 +116,73 @@ describe('a saved copy that was cut', () => {
     const { view } = await renderView('ready', detail);
 
     expect(view.queryByText(/recortada/i)).toBeNull();
+  });
+});
+
+// A BAND, the same on every article, with the full photo one tap away in the
+// viewer. Measured over a hundred of the newsroom's photos, 16:9 loses 21% of
+// the average one and takes 30% of the screen — the least crop that still
+// leaves the headline, the deck and the save button above the fold.
+describe('the photo band', () => {
+  it('is the same shape on every article', async () => {
+    const tall = await renderView('ready', { ...detail, imageAspectRatio: 0.5 });
+    const wide = await renderView('ready', { ...detail, imageAspectRatio: 3.2 });
+
+    for (const view of [tall.view, wide.view]) {
+      const band = StyleSheet.flatten(view.getByTestId('photo-band').props.style);
+      expect(band.aspectRatio).toBeCloseTo(HERO_BAND_RATIO, 3);
+    }
+  });
+
+  it('clips rather than squashing what does not fit', async () => {
+    const { view } = await renderView('ready', detail);
+
+    expect(StyleSheet.flatten(view.getByTestId('photo-band').props.style).overflow).toBe('hidden');
+  });
+
+  // Where the window falls is `bandCrop`'s rule and is tested there. What
+  // matters HERE is that the view applies it: a tall photo is drawn at its own
+  // shape and slid up, rather than sitting where an image would sit by default.
+  it('draws a tall photo at its own shape and slides it up', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 0.75 });
+
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(photo.aspectRatio).toBeCloseTo(0.75, 3);
+    expect(photo.marginTop).toMatch(NEGATIVE_PERCENT);
+  });
+
+  // A wide photo is cropped left and right instead, where centred is exactly
+  // right, so there is no window to slide and nothing to move.
+  it('lets a wide photo fill the band and crop at the sides', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: 3.2 });
+
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(photo.aspectRatio).toBeCloseTo(HERO_BAND_RATIO, 3);
+    expect(photo.marginTop).toBe('0%');
+  });
+
+  it('falls back to a common shape when the photo has none', async () => {
+    const { view } = await renderView('ready', { ...detail, imageAspectRatio: undefined });
+
+    const photo = StyleSheet.flatten(view.getByTestId('article-photo').props.style);
+
+    expect(photo.aspectRatio).toBeCloseTo(DEFAULT_ASPECT_RATIO, 3);
+  });
+
+  it('opens the photo on its own when tapped', async () => {
+    const { onOpenPhoto, view } = await renderView('ready', detail);
+
+    await fireEvent.press(view.getByLabelText('Ver la foto completa'));
+
+    expect(onOpenPhoto).toHaveBeenCalledWith('https://cdn/t720.jpeg');
+  });
+
+  it('offers nothing to open when the note has no photo', async () => {
+    const { view } = await renderView('ready', { ...detail, imageUrl: undefined });
+
+    expect(view.queryByLabelText('Ver la foto completa')).toBeNull();
+    expect(view.queryByTestId('photo-band')).toBeNull();
   });
 });

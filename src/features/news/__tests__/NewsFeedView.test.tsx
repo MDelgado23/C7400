@@ -2,23 +2,52 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { NewsFeedView, resolveFeedStatus, type FeedStatus } from '../NewsFeedView';
 import type { NewsItem } from '../newsMapping';
 
+const NOW = Date.parse('2026-07-10T12:00:00Z');
+
 const items: NewsItem[] = [
-  { id: 'a', title: 'Fórmula en Azul', summary: 's', kicker: 'Deportes', publishedAt: '2026-07-10T00:00:00Z' },
+  { id: 'a', title: 'Fórmula en Azul', summary: 's', kicker: 'Deportes', publishedAt: '2026-07-10T09:00:00Z' },
   { id: 'b', title: 'El Concejo delibera', summary: 's', publishedAt: '2026-07-09T00:00:00Z' },
 ];
 
-async function renderView(status: FeedStatus, data: NewsItem[] = []) {
+beforeEach(() => {
+  jest.spyOn(Date, 'now').mockReturnValue(NOW);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+/** State of the paging that happens BELOW the list. */
+interface MoreState {
+  loadingMore?: boolean;
+  reachedEnd?: boolean;
+  categories?: { id: string; name: string }[];
+  selectedCategoryId?: string | null;
+}
+
+async function renderView(status: FeedStatus, data: NewsItem[] = [], more: MoreState = {}) {
   const onRetry = jest.fn();
   const onSelectArticle = jest.fn();
+  const onRefresh = jest.fn();
+  const onEndReached = jest.fn();
+  const onSelectCategory = jest.fn();
   const view = await render(
     <NewsFeedView
       status={status}
       items={data}
       onRetry={onRetry}
       onSelectArticle={onSelectArticle}
+      refreshing={false}
+      onRefresh={onRefresh}
+      onEndReached={onEndReached}
+      loadingMore={more.loadingMore ?? false}
+      reachedEnd={more.reachedEnd ?? false}
+      categories={more.categories ?? []}
+      selectedCategoryId={more.selectedCategoryId ?? null}
+      onSelectCategory={onSelectCategory}
     />,
   );
-  return { onRetry, onSelectArticle, view };
+  return { onRetry, onSelectArticle, onRefresh, onEndReached, onSelectCategory, view };
 }
 
 describe('NewsFeedView', () => {
@@ -30,13 +59,57 @@ describe('NewsFeedView', () => {
   it('shows an error message with retry when the request fails', async () => {
     const { onRetry, view } = await renderView('error');
     expect(view.getByText('No pudimos cargar las noticias')).toBeTruthy();
-    fireEvent.press(view.getByLabelText('Reintentar'));
+    await fireEvent.press(view.getByLabelText('Reintentar'));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('shows an empty message when there are no articles', async () => {
     const { view } = await renderView('empty');
     expect(view.getByText('No hay noticias por ahora')).toBeTruthy();
+  });
+
+  // Which kind of empty matters: a quiet week is the app working, a section
+  // with nothing in it is a filter the reader can undo.
+  describe('the sections', () => {
+    const SECTIONS = [
+      { id: 'loc', name: 'Locales' },
+      { id: 'pol', name: 'Policiales' },
+    ];
+
+    it('says a quiet SECTION is quiet, not that there is no news at all', async () => {
+      const { view } = await renderView('empty', [], {
+        categories: SECTIONS,
+        selectedCategoryId: 'pol',
+      });
+
+      expect(view.getByText(/No hay noticias de esta sección/)).toBeTruthy();
+    });
+
+    // THE WAY OUT. Filter to a section with nothing in it and the body becomes
+    // the empty state; if the chips went with it the reader would be shut
+    // inside a section with no way back to the feed.
+    it('keeps the chips reachable on the empty state', async () => {
+      const { onSelectCategory, view } = await renderView('empty', [], {
+        categories: SECTIONS,
+        selectedCategoryId: 'pol',
+      });
+
+      await fireEvent.press(view.getByLabelText('Todas'));
+
+      expect(onSelectCategory).toHaveBeenCalledWith(null);
+    });
+
+    it('keeps the chips reachable while the feed is loading', async () => {
+      const { view } = await renderView('loading', [], { categories: SECTIONS });
+
+      expect(view.getByLabelText('Locales')).toBeTruthy();
+    });
+
+    it('keeps the chips reachable on the error state', async () => {
+      const { view } = await renderView('error', [], { categories: SECTIONS });
+
+      expect(view.getByLabelText('Locales')).toBeTruthy();
+    });
   });
 
   it('lists article titles when the feed is ready', async () => {
@@ -47,8 +120,83 @@ describe('NewsFeedView', () => {
 
   it('selects an article when its card is pressed', async () => {
     const { onSelectArticle, view } = await renderView('ready', items);
-    fireEvent.press(view.getByTestId('article-a'));
+    await fireEvent.press(view.getByTestId('article-a'));
     expect(onSelectArticle).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+  });
+
+  describe('the publication time on the card', () => {
+    // Without it a note from three hours ago and one from yesterday look
+    // identical, which on a radio's feed loses half of what makes it worth
+    // opening.
+    it('shows how long ago each note was published', async () => {
+      const { view } = await renderView('ready', items);
+
+      expect(view.getByText('hace 3 h')).toBeTruthy();
+      expect(view.getByText('ayer')).toBeTruthy();
+    });
+
+    // Nothing beats something wrong: the line is simply absent.
+    it('shows no time at all when the date cannot be read', async () => {
+      const { view } = await renderView('ready', [{ ...items[0], publishedAt: 'cuando sea' }]);
+
+      expect(view.queryByTestId('published-a')).toBeNull();
+      expect(view.getByText('Fórmula en Azul')).toBeTruthy();
+    });
+  });
+
+  describe('pull to refresh', () => {
+    // The gesture everybody makes on a feed by reflex. Until now it did
+    // nothing at all.
+    it('asks for fresh news when the list is pulled down', async () => {
+      const { onRefresh, view } = await renderView('ready', items);
+
+      await fireEvent(view.getByTestId('news-list'), 'refresh');
+
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // THE FEED ENDS. Not an endless scroll that keeps pulling until the phone
+  // gives up: it carries a week, and when the week is covered it says so and
+  // points at the notes the reader kept.
+  describe('reaching the bottom', () => {
+    it('asks for the next page when the list runs out', async () => {
+      const { onEndReached, view } = await renderView('ready', items);
+
+      await fireEvent(view.getByTestId('news-list'), 'endReached');
+
+      expect(onEndReached).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows that more is on the way while a page is in flight', async () => {
+      const { view } = await renderView('ready', items, { loadingMore: true });
+
+      expect(view.getByLabelText('Cargando más noticias')).toBeTruthy();
+    });
+
+    it('says where the week stops once there is nothing more', async () => {
+      const { view } = await renderView('ready', items, { reachedEnd: true });
+
+      expect(view.getByText(/Hasta acá/)).toBeTruthy();
+    });
+
+    // Announcing the end while a page is still coming would be a lie the reader
+    // watches correct itself a second later.
+    it('says nothing about the end while a page is still coming', async () => {
+      const { view } = await renderView('ready', items, {
+        loadingMore: true,
+        reachedEnd: true,
+      });
+
+      expect(view.queryByText(/Hasta acá/)).toBeNull();
+    });
+
+    it('shows neither while there is simply more to scroll', async () => {
+      const { view } = await renderView('ready', items);
+
+      expect(view.queryByLabelText('Cargando más noticias')).toBeNull();
+      expect(view.queryByText(/Hasta acá/)).toBeNull();
+    });
   });
 });
 

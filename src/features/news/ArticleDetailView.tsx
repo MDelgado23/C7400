@@ -1,8 +1,9 @@
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../ui/atoms/Screen';
+import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
+import { HERO_BAND_RATIO, bandCrop } from './photoBand';
 import type { ArticleDetail } from './newsMapping';
 
 export type DetailStatus = 'loading' | 'error' | 'ready';
@@ -21,6 +22,8 @@ interface ArticleDetailViewProps {
   onRetry: () => void;
   isSaved: boolean;
   onToggleSave: () => void;
+  /** Opens the photo on its own, uncropped and zoomable. */
+  onOpenPhoto: (uri: string) => void;
 }
 
 /**
@@ -38,10 +41,11 @@ export function ArticleDetailView({
   onRetry,
   isSaved,
   onToggleSave,
+  onOpenPhoto,
 }: ArticleDetailViewProps) {
   if (status === 'loading') {
     return (
-      <Screen>
+      <Screen edges={BELOW_HEADER_EDGES}>
         <View style={styles.center}>
           <ActivityIndicator accessibilityLabel="Cargando nota" color={colors.text} />
         </View>
@@ -51,7 +55,7 @@ export function ArticleDetailView({
 
   if (status === 'error' || !article) {
     return (
-      <Screen>
+      <Screen edges={BELOW_HEADER_EDGES}>
         <View style={styles.center}>
           <AppText style={styles.errorText}>No pudimos cargar la nota</AppText>
           <Pressable
@@ -68,11 +72,39 @@ export function ArticleDetailView({
     );
   }
 
+  const crop = bandCrop(article.imageAspectRatio);
+
   return (
-    <Screen padded={false}>
+    <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <ScrollView contentContainerStyle={styles.content}>
         {article.imageUrl ? (
-          <Image source={{ uri: article.imageUrl }} style={styles.hero} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ver la foto completa"
+            onPress={() => onOpenPhoto(article.imageUrl as string)}
+          >
+            <View testID="photo-band" style={styles.band}>
+              {/*
+                THE WINDOW IS CENTRED A LITTLE ABOVE THE MIDDLE of the photo,
+                which is neither of the two obvious choices and better than
+                both: centred cuts the faces off a portrait, pinned to the top
+                fills the band with ceiling and throws the rest away. See
+                `bandCrop` for the arithmetic, and for what it does when there
+                is barely anything to crop.
+              */}
+              <Image
+                testID="article-photo"
+                source={{ uri: article.imageUrl }}
+                style={{
+                  width: '100%',
+                  aspectRatio: crop.photoAspectRatio,
+                  // Slides the photo up so the window lands on the subject.
+                  marginTop: `${crop.shiftPercent}%`,
+                }}
+                resizeMode="cover"
+              />
+            </View>
+          </Pressable>
         ) : null}
         {article.kicker ? (
           <AppText variant="caption" muted>
@@ -134,9 +166,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   content: { padding: spacing.md, gap: spacing.sm },
-  hero: {
+  band: {
     width: '100%',
-    height: 200,
+    aspectRatio: HERO_BAND_RATIO,
+    // What sticks out below the band is clipped, which is what makes the photo
+    // sit against the TOP edge instead of being centred in it.
+    overflow: 'hidden',
     borderRadius: radius.md,
     backgroundColor: colors.primaryDark,
     marginBottom: spacing.sm,

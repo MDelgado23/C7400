@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '../../ui/atoms/Screen';
+import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { colors, radius, spacing } from '../../ui/theme';
 import type { AccountItem, AccountItemId, AccountSection } from './accountMenu';
@@ -70,7 +70,7 @@ export function AccountView({
 }: AccountViewProps) {
   if (session === null) {
     return (
-      <Screen>
+      <Screen edges={BELOW_HEADER_EDGES}>
         <View style={styles.center}>
           <ActivityIndicator accessibilityLabel="Cargando cuenta" color={colors.text} />
         </View>
@@ -80,7 +80,7 @@ export function AccountView({
 
   if (session.isAnonymous) {
     return (
-      <Screen>
+      <Screen edges={BELOW_HEADER_EDGES}>
         <View style={styles.center}>
           <Ionicons name="person-circle-outline" size={64} color={colors.textMuted} />
           <AppText variant="title" style={styles.pitchTitle}>
@@ -118,7 +118,7 @@ export function AccountView({
   }
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} edges={BELOW_HEADER_EDGES}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.identity}>
           <Ionicons name="person-circle" size={40} color={colors.primary} />

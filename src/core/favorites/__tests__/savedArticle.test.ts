@@ -156,3 +156,34 @@ describe('fromStoredData', () => {
     expect('kicker' in (recovered as SavedArticle)).toBe(false);
   });
 });
+
+// Notes saved before the mapper learned to build absolute addresses carry the
+// PATH the API sends under a field named `webUrl`. Those rows are already in
+// Firestore, and a link that opens nothing is worse than no link at all.
+describe('fromStoredData and the legacy webUrl', () => {
+  const stored = {
+    id: 'a',
+    title: 'Una nota',
+    summary: '',
+    publishedAt: '2026-08-20T10:00:00.000Z',
+    paragraphs: [],
+    savedAt: 1,
+  };
+
+  it('keeps an absolute https address', () => {
+    const recovered = fromStoredData({ ...stored, webUrl: 'https://lu32.com.ar/locales/nota' });
+
+    expect(recovered?.webUrl).toBe('https://lu32.com.ar/locales/nota');
+  });
+
+  it.each([
+    ['a bare path', '/locales/aoma-inicia-medidas-gremiales'],
+    ['an http address', 'http://lu32.com.ar/locales/nota'],
+    ['a scheme', 'javascript:alert(1)'],
+  ])('drops %s, keeping the rest of the note', (_label, webUrl) => {
+    const recovered = fromStoredData({ ...stored, webUrl });
+
+    expect(recovered).toMatchObject({ id: 'a', title: 'Una nota' });
+    expect(recovered?.webUrl).toBeUndefined();
+  });
+});

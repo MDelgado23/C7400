@@ -22,6 +22,12 @@ export interface AppConfig {
   /** Station badge, used as the lock-screen / media-notification artwork. Must
    *  be a real HTTPS URL — expo-audio rejects scheme-less/bundled values. */
   stationLogoUrl: string;
+  /**
+   * The public site, used to turn the PATHS the news API sends into real
+   * addresses. Lives here rather than baked in so a domain change is an edit to
+   * a JSON file, exactly like the stream and the API.
+   */
+  siteBase: string;
 }
 
 /** Baked-in defaults. Verified working as of 2026-07-10. */
@@ -29,6 +35,7 @@ const FALLBACK_CONFIG: AppConfig = {
   streamUrl: 'https://ssl.radiosnethosting.com/index.php?port=9966',
   newsApiBase: 'https://flex-app.tadevel-cdn.com/hostname/lu32.com.ar/api/v1',
   stationLogoUrl: 'https://i.ibb.co/VWR11c8H/logo-am-square.png',
+  siteBase: 'https://lu32.com.ar',
 };
 
 /**
@@ -64,6 +71,9 @@ function sanitize(input: unknown): Partial<AppConfig> {
   }
   if (typeof data.stationLogoUrl === 'string' && data.stationLogoUrl.startsWith('https://')) {
     out.stationLogoUrl = data.stationLogoUrl;
+  }
+  if (typeof data.siteBase === 'string' && data.siteBase.startsWith('https://')) {
+    out.siteBase = data.siteBase;
   }
   return out;
 }

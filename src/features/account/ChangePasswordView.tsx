@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BELOW_HEADER_EDGES, Screen } from '../../ui/atoms/Screen';
 import { AppText } from '../../ui/atoms/AppText';
 import { Spinner } from '../../ui/atoms/Spinner';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import { MIN_PASSWORD_LENGTH } from '../../core/auth/credentials';
 
 interface ChangePasswordViewProps {
@@ -43,6 +43,8 @@ export function ChangePasswordView({
   onToggleReveal,
   onSubmit,
 }: ChangePasswordViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   // The label doubles as the accessible name AND the disabled state, so a screen
   // reader never announces "Cambiar contraseña" on a control that is mid-flight.
   const submitLabel = busy ? 'Guardando' : 'Cambiar contraseña';
@@ -130,9 +132,11 @@ export function ChangePasswordView({
           style={[styles.submit, busy && styles.submitBusy]}
         >
           {busy ? (
-            <Spinner size={20} thickness={2} color={colors.text} />
+            <Spinner size={20} thickness={2} color={colors.onPrimary} />
           ) : (
-            <AppText variant="subtitle">Cambiar contraseña</AppText>
+            <AppText variant="subtitle" style={styles.onBrand}>
+              Cambiar contraseña
+            </AppText>
           )}
         </Pressable>
       </ScrollView>
@@ -140,31 +144,37 @@ export function ChangePasswordView({
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: spacing.md, gap: spacing.md },
-  field: { gap: spacing.xs },
-  fieldHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  reveal: { padding: spacing.xs },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + spacing.xs,
-    color: colors.text,
-    fontSize: 16,
-  },
-  error: { color: colors.error },
-  notice: { color: colors.primary },
-  submit: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-    marginTop: spacing.sm,
-  },
-  submitBusy: { backgroundColor: colors.primaryDark },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    content: { padding: spacing.md, gap: spacing.md },
+    field: { gap: spacing.xs },
+    fieldHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    reveal: { padding: spacing.xs },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + spacing.xs,
+      color: colors.text,
+      fontSize: 16,
+    },
+    error: { color: colors.error },
+    notice: { color: colors.primary },
+    submit: {
+      backgroundColor: colors.primary,
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 52,
+      marginTop: spacing.sm,
+    },
+    submitBusy: { backgroundColor: colors.primaryDark },
+  });

@@ -1,7 +1,7 @@
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, radius, spacing } from '../../ui/theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../../ui/theme';
 import type { SponsorLink, SponsorLinkKind } from '../../core/sponsors/sponsorLinks';
 import type { Sponsor } from '../../core/sponsors/sponsor';
 
@@ -45,6 +45,8 @@ export function SponsorSheetView({
   onDismiss,
   bottomInset,
 }: SponsorSheetViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   return (
     <View style={[styles.sheet, { paddingBottom: bottomInset }]}>
       <View style={styles.grabber} />
@@ -110,40 +112,41 @@ export function SponsorSheetView({
 
 const LOGO = 64;
 
-const styles = StyleSheet.create({
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.lg,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.border,
-  },
-  header: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  headerText: { flex: 1, gap: spacing.xs },
-  logo: {
-    width: LOGO,
-    height: LOGO,
-    borderRadius: radius.sm,
-    backgroundColor: colors.text,
-  },
-  links: { gap: spacing.sm },
-  link: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  noLinks: { textAlign: 'center' },
-  dismiss: { alignSelf: 'center', paddingVertical: spacing.sm },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      gap: spacing.lg,
+    },
+    grabber: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: radius.pill,
+      backgroundColor: colors.border,
+    },
+    header: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
+    headerText: { flex: 1, gap: spacing.xs },
+    logo: {
+      width: LOGO,
+      height: LOGO,
+      borderRadius: radius.sm,
+      backgroundColor: colors.text,
+    },
+    links: { gap: spacing.sm },
+    link: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: colors.background,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+    },
+    noLinks: { textAlign: 'center' },
+    dismiss: { alignSelf: 'center', paddingVertical: spacing.sm },
+  });

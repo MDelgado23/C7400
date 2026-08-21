@@ -8,6 +8,11 @@
  * not tap.
  */
 
+import {
+  themePreferenceLabel,
+  type ThemePreference,
+} from '../../core/theme/themePreference';
+
 export type AccountItemId = 'change-password' | 'saved-articles' | 'theme';
 
 export interface AccountItem {
@@ -32,9 +37,10 @@ export interface AccountSection {
  * PURE. What to show inside the Cuenta tab for a signed-in user.
  *
  * A function rather than a constant so it can take the current theme, locale and
- * so on as those arrive, without every call site changing shape.
+ * so on as those arrive, without every call site changing shape. The theme was
+ * the first of those to arrive, and it slotted in exactly as intended.
  */
-export function accountSections(): AccountSection[] {
+export function accountSections(theme: ThemePreference): AccountSection[] {
   return [
     {
       title: 'Seguridad',
@@ -46,9 +52,17 @@ export function accountSections(): AccountSection[] {
     },
     {
       title: 'Visual',
-      // The app is dark-only today; the row states that rather than pretending
-      // there is a choice behind it.
-      items: [{ id: 'theme', label: 'Tema', detail: 'Oscuro', available: false }],
+      // The current value on the row, not just the name of the setting. A
+      // settings list whose values are only discoverable by opening each row is
+      // one you have to tap through to find what you changed.
+      items: [
+        {
+          id: 'theme',
+          label: 'Tema',
+          detail: themePreferenceLabel(theme),
+          available: true,
+        },
+      ],
     },
   ];
 }

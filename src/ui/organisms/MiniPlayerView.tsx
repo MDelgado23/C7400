@@ -2,7 +2,7 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../atoms/AppText';
 import { Spinner } from '../atoms/Spinner';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../theme';
 import { toggleIntent, type PlayerState } from '../../core/store/playerStore';
 
 /** Station badge, shown as the mini-player artwork when no program image exists. */
@@ -32,6 +32,8 @@ export function MiniPlayerView({
   onToggle,
   onPress,
 }: MiniPlayerViewProps) {
+  const styles = useThemedStyles(makeStyles);
+  const colors = useColors();
   const willPause = toggleIntent(state) === 'pause';
   const isBuffering = state === 'buffering';
   const controlLabel = isBuffering ? 'Cargando' : willPause ? 'Pausar' : 'Reproducir';
@@ -73,13 +75,24 @@ export function MiniPlayerView({
         hitSlop={8}
         style={styles.control}
       >
+        {/*
+          `control` — the token for the play/pause affordance, shared with the
+          big round button on Radio so the one thing this app is FOR is a single
+          colour decision. The bar is otherwise all text; this is its one live
+          control, and it gets a colour of its own rather than reading as
+          another line of copy.
+
+          The spinner takes it too: it stands in for this very button while the
+          stream reconnects, and a control that changes colour on its way to the
+          same place reads as two different things.
+        */}
         {isBuffering ? (
-          <Spinner size={22} thickness={2} color={colors.text} />
+          <Spinner size={22} thickness={2} color={colors.control} />
         ) : (
           <Ionicons
             name={willPause ? 'pause' : 'play'}
             size={26}
-            color={colors.text}
+            color={colors.control}
             style={willPause ? undefined : styles.playIconOffset}
           />
         )}
@@ -90,29 +103,30 @@ export function MiniPlayerView({
 
 const ARTWORK_SIZE = 44;
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  artwork: {
-    width: ARTWORK_SIZE,
-    height: ARTWORK_SIZE,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primaryDark,
-  },
-  info: { flex: 1 },
-  control: {
-    paddingHorizontal: spacing.sm,
-    minWidth: 40,
-    alignItems: 'center',
-  },
-  // The play triangle reads as left-heavy; nudge it to optical centre.
-  playIconOffset: { marginLeft: 3 },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: colors.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    artwork: {
+      width: ARTWORK_SIZE,
+      height: ARTWORK_SIZE,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primaryDark,
+    },
+    info: { flex: 1 },
+    control: {
+      paddingHorizontal: spacing.sm,
+      minWidth: 40,
+      alignItems: 'center',
+    },
+    // The play triangle reads as left-heavy; nudge it to optical centre.
+    playIconOffset: { marginLeft: 3 },
+  });

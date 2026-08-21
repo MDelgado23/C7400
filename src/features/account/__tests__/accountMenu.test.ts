@@ -1,6 +1,10 @@
 import { accountSections, accountTabLabel, type AccountItem } from '../accountMenu';
+import type { ThemePreference } from '../../../core/theme/themePreference';
 
-const allItems = (): AccountItem[] => accountSections().flatMap((section) => section.items);
+const sections = (theme: ThemePreference = 'dark') => accountSections(theme);
+
+const allItems = (theme: ThemePreference = 'dark'): AccountItem[] =>
+  sections(theme).flatMap((section) => section.items);
 
 describe('accountTabLabel', () => {
   it('says Entrar to someone without an account', () => {
@@ -23,7 +27,7 @@ describe('accountTabLabel', () => {
 
 describe('accountSections', () => {
   it('groups the settings under headings', () => {
-    expect(accountSections().map((section) => section.title)).toEqual([
+    expect(sections().map((section) => section.title)).toEqual([
       'Seguridad',
       'Notas',
       'Visual',
@@ -50,14 +54,29 @@ describe('accountSections', () => {
     expect(saved?.available).toBe(true);
   });
 
-  it.each(['theme'])('marks %s as not built yet', (id) => {
-    // Declared but inert. A row that looks tappable and does nothing is worse
-    // than one that says plainly it is not ready.
-    expect(allItems().find((item) => item.id === id)?.available).toBe(false);
+  it('marks the theme row as usable, now that there is somewhere to go', () => {
+    expect(allItems().find((item) => item.id === 'theme')?.available).toBe(true);
+  });
+
+  it('leaves no row inert, now that every destination exists', () => {
+    // The inverse of the check this replaced, which listed the unbuilt rows.
+    // When the next one lands, THIS is the test that has to be narrowed back
+    // down — deliberately, rather than a stale allowlist quietly passing.
+    for (const item of allItems()) {
+      expect(`${item.id}: ${item.available}`).toBe(`${item.id}: true`);
+    }
+  });
+
+  it('shows the chosen theme on the row, so the value is visible without opening it', () => {
+    // A settings row whose current value is only discoverable by tapping it is
+    // a settings row that makes you tap everything to find what you changed.
+    expect(allItems('light').find((item) => item.id === 'theme')?.detail).toBe('Claro');
+    expect(allItems('system').find((item) => item.id === 'theme')?.detail).toBe('Automático');
+    expect(allItems('dark').find((item) => item.id === 'theme')?.detail).toBe('Oscuro');
   });
 
   it('puts the saved notes under their own heading, not under security', () => {
-    const notes = accountSections().find((section) => section.title === 'Notas');
+    const notes = sections().find((section) => section.title === 'Notas');
     expect(notes?.items.map((item) => item.id)).toEqual(['saved-articles']);
   });
 });

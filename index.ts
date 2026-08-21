@@ -9,6 +9,9 @@ import { setFavoritesProvider } from './src/core/favorites/favoritesService';
 import { firestoreFavoritesProvider } from './src/core/favorites/firestoreFavoritesAdapter';
 import { setSponsorsStore } from './src/core/sponsors/sponsorsCache';
 import { asyncStorageSponsorsStore } from './src/core/sponsors/asyncStorageSponsorsStore';
+import { setThemeStore, setThemeSyncProvider } from './src/core/theme/themeService';
+import { asyncStorageThemeStore } from './src/core/theme/asyncStorageThemeStore';
+import { firestoreThemeProvider } from './src/core/theme/firestoreThemeAdapter';
 
 // Registered HERE, at module scope, and deliberately not from a React effect.
 // `config_fallback_used` is reported from inside `loadRemoteConfig()`, which is
@@ -39,6 +42,22 @@ setFavoritesProvider(firestoreFavoritesProvider);
 // would answer "nothing cached", the grid would show a spinner it did not need,
 // and the phone would pay for a full download it already had on disk.
 setSponsorsStore(asyncStorageSponsorsStore);
+
+// The theme, and this one is registered at module scope more urgently than any
+// of the others: the read it kicks off is what the SPLASH WAITS ON. Anything
+// later — a React effect, a lazy import — would reveal the app on the default
+// palette and repaint it a frame afterwards, in front of the user. The whole
+// reason the choice is cached on the device is to make that impossible.
+//
+// The device store goes FIRST and the account provider second, and the order is
+// load-bearing in both directions. The port settles hydration on its own when no
+// device store is registered, so registering the account provider first would
+// declare the app hydrated on the default and let the splash lift early. And the
+// account provider follows the signed-in user, so it has to come AFTER
+// setAuthProvider or it misses the report that says whose preference to read —
+// the same reasoning as the favourites port above.
+setThemeStore(asyncStorageThemeStore);
+setThemeSyncProvider(firestoreThemeProvider);
 
 // Give the device an identity so anything it saves outlives the session.
 //

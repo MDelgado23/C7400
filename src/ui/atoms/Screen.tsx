@@ -1,6 +1,6 @@
 import { StyleSheet, View, type ViewProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
-import { colors, spacing } from '../theme';
+import { spacing, useThemedStyles, type Palette } from '../theme';
 
 interface ScreenProps extends ViewProps {
   /** Apply default screen padding (default: true). */
@@ -30,6 +30,8 @@ export function Screen({
   children,
   ...rest
 }: ScreenProps) {
+  const styles = useThemedStyles(makeStyles);
+
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
       <View style={[styles.content, padded && styles.padded, style]} {...rest}>
@@ -44,8 +46,9 @@ const DEFAULT_EDGES = ['top', 'left', 'right'] as const;
 /** For a screen inside a stack whose header already clears the status bar. */
 export const BELOW_HEADER_EDGES = ['left', 'right'] as const;
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1 },
-  padded: { padding: spacing.md },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.background },
+    content: { flex: 1 },
+    padded: { padding: spacing.md },
+  });

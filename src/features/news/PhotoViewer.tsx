@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../ui/atoms/AppText';
-import { colors, spacing } from '../../ui/theme';
+import { palettes, spacing } from '../../ui/theme';
 
 interface PhotoViewerProps {
   /** The photo to show, or null when nothing is open. */
@@ -34,6 +34,10 @@ const MAX_SCALE = 4;
  * reach into it — without this the gestures are simply dead, silently.
  */
 export function PhotoViewer({ uri, onClose }: PhotoViewerProps) {
+  // No theme hooks here, and that is deliberate rather than an oversight: this
+  // screen is BLACK in both themes (see `backdrop` below), so its controls are
+  // pinned to the dark palette. Following the active one would paint them
+  // near-black on black the first time somebody picks the light theme.
   // The modal draws edge to edge, so the close button and the hint have to
   // clear the system bars themselves — nothing else is going to.
   const safeArea = useSafeAreaInsets();
@@ -144,12 +148,11 @@ export function PhotoViewer({ uri, onClose }: PhotoViewerProps) {
             hitSlop={16}
             style={[styles.close, { top: safeArea.top + spacing.sm }]}
           >
-            <Ionicons name="close" size={26} color={colors.text} />
+            <Ionicons name="close" size={26} color={palettes.dark.text} />
           </Pressable>
 
           <AppText
             variant="caption"
-            muted
             style={[styles.hint, { bottom: safeArea.bottom + spacing.lg }]}
           >
             Pellizcá para ampliar · tocá dos veces para acercar
@@ -160,6 +163,12 @@ export function PhotoViewer({ uri, onClose }: PhotoViewerProps) {
   );
 }
 
+/*
+ * Module scope, unlike every other stylesheet in the app, because nothing in it
+ * varies: this screen does not follow the theme. The two colours it does paint
+ * come from `palettes.dark` explicitly — that is what makes them readable on a
+ * backdrop that is black no matter what the reader chose.
+ */
 const styles = StyleSheet.create({
   root: { flex: 1 },
   /*
@@ -183,5 +192,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
+    // Spelled out rather than reached for through AppText's `muted`, which
+    // reads the ACTIVE palette: on the light one that token is #55658A, which
+    // is 3.62:1 against this black — under AA for prose. The dark token gives
+    // 8.57:1 and is the muted grey this screen has always shown.
+    color: palettes.dark.textMuted,
   },
 });

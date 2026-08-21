@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '../atoms/AppText';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing, useColors, useThemedStyles, type Palette } from '../theme';
 
 interface BackgroundPlaybackNoticeProps {
   /** Open the system battery-optimization exemption dialog. */
@@ -21,6 +21,7 @@ interface BackgroundPlaybackNoticeProps {
 export function BackgroundPlaybackNotice({
   onEnable,
 }: BackgroundPlaybackNoticeProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.container} accessibilityRole="alert">
       <View style={styles.text}>
@@ -38,28 +39,36 @@ export function BackgroundPlaybackNotice({
         style={styles.enableButton}
         hitSlop={8}
       >
-        <AppText variant="subtitle">Activar</AppText>
+        <AppText variant="subtitle" style={styles.onBrand}>
+          Activar
+        </AppText>
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  text: { flex: 1, gap: spacing.xs },
-  enableButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-  },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    // Content sitting ON a brand fill. It does NOT follow `colors.text`, and
+    // that is the point of the token: in the dark palette the two happen to be
+    // the same white, so the difference is invisible — until the light palette
+    // makes `text` near-black and the label disappears into a blue button.
+    onBrand: { color: colors.onPrimary },
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    text: { flex: 1, gap: spacing.xs },
+    enableButton: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primary,
+    },
+  });

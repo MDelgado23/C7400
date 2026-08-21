@@ -1,5 +1,7 @@
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { PlayerScreenView } from '../PlayerScreenView';
+import { palettes } from '../../../ui/theme';
 import type { PlayerState } from '../../../core/store/playerStore';
 
 async function renderView(state: PlayerState, title = 'La Mañana de LU32') {
@@ -15,6 +17,30 @@ async function renderView(state: PlayerState, title = 'La Mañana de LU32') {
   );
   return { onToggle, onRetry, view };
 }
+
+describe('the main play control', () => {
+  /*
+   * The big round button is FILLED with `control` — the same token the mini
+   * bar's glyph uses, so the one affordance that matters is a single colour
+   * decision rather than two that drift. The icon over it stays `onPrimary`,
+   * which is what keeps it readable whatever `control` becomes.
+   *
+   * Default theme here, so this reads the dark palette; `tokens.test.ts` owns
+   * the argument about what each palette sets it to.
+   */
+  const fillOf = (element: { props?: { style?: unknown } }) =>
+    (StyleSheet.flatten(element.props?.style as never) as { backgroundColor?: string } | undefined)
+      ?.backgroundColor;
+
+  it.each([
+    ['paused', 'Reproducir'],
+    ['playing', 'Pausar'],
+  ] as const)('fills the %s button with the control colour', async (state, label) => {
+    const { view } = await renderView(state);
+
+    expect(fillOf(view.getByLabelText(label))).toBe(palettes.dark.control);
+  });
+});
 
 describe('PlayerScreenView', () => {
   it('shows the current program and station name', async () => {

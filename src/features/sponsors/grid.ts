@@ -20,6 +20,22 @@ import type { Sponsor } from '../../core/sponsors/sponsor';
 export const GRID_COLUMNS = 3;
 
 /**
+ * The shape of the artwork sponsors are asked for: 640x512.
+ *
+ * THE PLATE IS BUILT TO THIS, and that is what stops the logos being padded. A
+ * logo drawn with `contain` on a plate of any other shape is letterboxed, and
+ * the bars are plate — which is exactly how a black line came to sit above and
+ * below every white logo the moment the light theme existed. Give the plate the
+ * artwork's own aspect and there is nothing left to fill: `contain` and `cover`
+ * agree, so nothing is padded and nothing is cropped.
+ *
+ * A file that does NOT meet the spec still centres safely rather than
+ * distorting — it is simply the one case where a sliver of plate shows, which
+ * is why the plate is white rather than a themed colour.
+ */
+export const LOGO_ASPECT = 640 / 512;
+
+/**
  * Rows to assume before anything has been measured, and the floor afterwards.
  * Three is the shape the section was designed around, so a first frame drawn
  * with it is never wildly wrong.
@@ -87,43 +103,73 @@ export interface GridMetrics {
   tileWidth: number;
   /** Height of one tile. Rows of these fill the box exactly. */
   tileHeight: number;
-  /** Height of the plate the logo is drawn on. It spans the tile's full width. */
+  /**
+   * The plate the logo is drawn on. ALWAYS `LOGO_ASPECT`, and both sides are
+   * reported because the caller has to set both: a plate that took its width
+   * from the tile and only its height from here would be back to whatever
+   * shape the screen happened to leave.
+   */
+  plateWidth: number;
   plateHeight: number;
   /** How many rows fit. Times the columns, this is the slot count to fill. */
   rows: number;
 }
 
 /**
+ * The largest `LOGO_ASPECT` rectangle that fits in a box — PURE.
+ *
+ * Width-led, because the tile's width is the fixed dimension and its height is
+ * whatever the stretched rows left over. When the leftover height is the tighter
+ * constraint the plate shrinks to it and gives the width back, so it never
+ * spills over the sponsor's name.
+ */
+function fitPlate(maxWidth: number, maxHeight: number): { width: number; height: number } {
+  const height = Math.max(Math.min(maxHeight, maxWidth / LOGO_ASPECT), MIN_PLATE_HEIGHT);
+  return { width: Math.min(height * LOGO_ASPECT, maxWidth), height };
+}
+
+/**
  * PURE. How the grid divides up the measured box.
  *
- * THE PLATE IS NOT SQUARE, and that is the point rather than a compromise. Once
- * the rows are stretched to fill the height, a tile is a little shorter than it
- * is wide — so the plate spans the tile's full WIDTH and takes whatever height
- * is left. A wide wordmark, which is what most businesses actually hand over,
- * then uses the whole plate instead of shrinking to fit a square; a square logo
- * simply centres itself. Both are drawn with `contain`, so neither distorts.
+ * THE PLATE IS NOT SQUARE, and that is the point rather than a compromise: it
+ * carries `LOGO_ASPECT`, the shape of the artwork itself. The tiles still
+ * stretch to fill the measured height — that is what keeps the section from
+ * leaving a dead strip — but the plate no longer inherits whatever shape the
+ * stretch produced. It takes the largest 640x512 rectangle that fits inside the
+ * tile, so a compliant logo is drawn edge to edge with nothing padded, and any
+ * height the plate does not use stays as tile.
  *
  * An unmeasured box yields zeroes rather than a guess, and the caller draws
  * nothing for that frame instead of a wrong size that visibly snaps into place.
  */
 export function gridMetrics({ width, height }: GridBox): GridMetrics {
-  const empty = { tileWidth: 0, tileHeight: 0, plateHeight: 0, rows: GRID_FALLBACK_ROWS };
+  const empty = {
+    tileWidth: 0,
+    tileHeight: 0,
+    plateWidth: 0,
+    plateHeight: 0,
+    rows: GRID_FALLBACK_ROWS,
+  };
   if (!(width > 0)) return empty;
 
   const innerWidth = width - GRID_CONTENT_PADDING * 2;
   if (innerWidth <= 0) return empty;
 
   const tileWidth = (innerWidth - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+  const maxPlateWidth = tileWidth - TILE_PADDING * 2;
 
   // The tile the section was designed around: a square plate, plus the name.
   const idealTileHeight = tileWidth + LABEL_BLOCK;
 
   const innerHeight = height - GRID_CONTENT_PADDING * 2;
   if (!Number.isFinite(innerHeight) || innerHeight <= 0) {
+    // Height unknown, so the width is the only constraint there is.
+    const plate = fitPlate(maxPlateWidth, Number.POSITIVE_INFINITY);
     return {
       tileWidth,
       tileHeight: idealTileHeight,
-      plateHeight: Math.max(tileWidth - TILE_PADDING * 2, MIN_PLATE_HEIGHT),
+      plateWidth: plate.width,
+      plateHeight: plate.height,
       rows: GRID_FALLBACK_ROWS,
     };
   }
@@ -139,10 +185,16 @@ export function gridMetrics({ width, height }: GridBox): GridMetrics {
   );
   const tileHeight = (innerHeight - GRID_GAP * (rows - 1)) / rows;
 
+  // The plate takes the artwork's shape inside whatever the stretched tile
+  // leaves. Any height the plate does not use stays as tile — same colour as
+  // the card it sits on, so it reads as breathing room rather than a band.
+  const plate = fitPlate(maxPlateWidth, tileHeight - TILE_PADDING * 2 - LABEL_BLOCK);
+
   return {
     tileWidth,
     tileHeight,
-    plateHeight: Math.max(tileHeight - TILE_PADDING * 2 - LABEL_BLOCK, MIN_PLATE_HEIGHT),
+    plateWidth: plate.width,
+    plateHeight: plate.height,
     rows,
   };
 }
